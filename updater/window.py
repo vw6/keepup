@@ -1132,7 +1132,11 @@ class Window(Adw.ApplicationWindow):
             b = Gtk.Button(label=f'Обновить до {update.new}')
             b.add_css_class('suggested-action')
             b.add_css_class('pill')
-            b.set_tooltip_text('В Arch пакеты обновляются только всей системой сразу')
+            b.set_tooltip_text('Только этот пакет и его сборка, если это не потянет обновление общих пакетов')
+            b.connect('clicked', lambda *_: self.ask_single_update(name))
+            buttons.append(b)
+            b = Gtk.Button(label='Обновить всю систему')
+            b.add_css_class('pill')
             b.connect('clicked', lambda *_: self.confirm_upgrade())
             buttons.append(b)
         b = Gtk.Button(label='Удалить')
@@ -1144,10 +1148,6 @@ class Window(Adw.ApplicationWindow):
         top = Adw.PreferencesGroup()
         top.add(head)
         page.add(top)
-        if update:
-            note = Adw.PreferencesGroup()
-            note.add(row(f'Есть {update.new}', 'в Arch пакеты обновляются только всей системой: кнопка обновит всё, что ждёт обновления'))
-            page.add(note)
         if meta and meta.screenshots:
             page.add(_screenshots(meta.screenshots))
 
@@ -1347,6 +1347,47 @@ class Window(Adw.ApplicationWindow):
 
         background(lambda: notes.for_version(name, version, url, aur.metainfo_file(files)), show_notes)
         background(find_sources, show_sources)
+
+    def ask_single_update(self, name):
+        s = self.snap
+        group = [n for n in pacman.related(name, s.packages) if any(u.name == n for u in s.updates)] or [name]
+
+        def show(result):
+            if isinstance(result, Exception):
+                self.toast(f'Не удалось рассчитать обновление: {result}')
+                return
+            targets, others, new = result
+            if not targets:
+                self.toast('Новой версии в свежих списках нет: нажмите «Проверить заново»')
+                return
+            if others:
+                ask = Adw.AlertDialog(heading=f'{name} отдельно не обновить',
+                                      body='Новая версия потянет обновление общих пакетов, которыми пользуются и другие программы: '
+                                           + ', '.join(f'{t.name} {t.version}' for t in others[:8])
+                                           + '. Обновлённые отдельно, они могут сломать программы, собранные под старые. Обновите всю систему.')
+                ask.add_response('cancel', 'Отмена')
+                ask.add_response('all', 'Обновить всю систему')
+                ask.set_response_appearance('all', Adw.ResponseAppearance.SUGGESTED)
+                ask.connect('response', lambda _d, resp: resp == 'all' and self.confirm_upgrade())
+                ask.present(self)
+                return
+            lines = [f'{t.name}  {s.packages[t.name].version} → {t.version}' for t in targets if t.name in s.packages]
+            lines += [f'{t.name} {t.version} (новая зависимость)' for t in new]
+            required = aur.local_info(name).get('Required By', 'None')
+            body = ('Поставится только это:\n' + '\n'.join(lines) + '\n\nОбщие пакеты не меняются, поэтому другие программы это не заденет.'
+                    + ('' if required in ('', 'None') else f' Пакет нужен и другим ({required.replace(chr(10), " ")[:120]}), '
+                       'но они получат ту же совместимую версию.'))
+            ask = Adw.AlertDialog(heading=f'Обновить только {name}?', body=body)
+            ask.add_response('cancel', 'Отмена')
+            ask.add_response('go', 'Обновить')
+            ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
+            ask.set_default_response('cancel')
+            urls = [t.url for t in targets]
+            ask.connect('response', lambda _d, resp: resp == 'go' and (self.nav.pop_to_tag('root'), self.run_op(
+                f'Обновление {name}', pacman.install_urls_command(urls))))
+            ask.present(self)
+
+        background(lambda: pacman.single_update_plan(group, s.packages), show)
 
     def confirm_repo_remove(self, name):
         group = Adw.PreferencesGroup()

@@ -380,3 +380,33 @@ def kind_icon(name):
         if rule.search(name):
             return icon
     return 'package-x-generic-symbolic'
+
+
+CHECKUPDATES_DB = os.environ.get('CHECKUPDATES_DB') or os.path.join(os.environ.get('TMPDIR', '/tmp'), f'checkup-db-{os.getuid()}')
+
+
+@dataclass
+class Target:
+    name: str
+    version: str
+    url: str
+
+
+def single_update_plan(names, packages, dbpath=CHECKUPDATES_DB):
+    """Что pacman поставил бы, обновляя только эти пакеты, по свежим спискам checkupdates (система не меняется).
+    Возвращает (цели, обновления других уже стоящих пакетов, новые зависимости)."""
+    out = subprocess.run(['pacman', '-Sp', '--dbpath', dbpath, '--print-format', '%n %v %l', *names],
+                         capture_output=True, stdin=subprocess.DEVNULL, text=True, env={**os.environ, 'LC_ALL': 'C'})
+    if out.returncode != 0:
+        raise RuntimeError(out.stderr.strip() or 'pacman не смог рассчитать обновление')
+    targets = [Target(*line.split(' ', 2)) for line in out.stdout.splitlines() if line.count(' ') >= 2]
+    # Пакеты сборки, у которых обновления нет, pacman просто поставил бы заново: их не считаем.
+    targets = [t for t in targets if t.name not in packages or packages[t.name].version != t.version]
+    others = [t for t in targets if t.name not in names and t.name in packages]
+    new = [t for t in targets if t.name not in packages]
+    return targets, others, new
+
+
+def install_urls_command(urls):
+    # Ставятся ровно эти файлы: списки пакетов системы не обновляются, частичного состояния не остаётся.
+    return ['pkexec', 'pacman', '-U', '--noconfirm', *urls]

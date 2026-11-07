@@ -161,3 +161,9 @@ class KindIcons(unittest.TestCase):
                  'chaotic-keyring': 'security-high-symbolic', 'harfbuzz': 'package-x-generic-symbolic', 'libarchive': 'application-x-addon-symbolic'}
         for name, icon in cases.items():
             self.assertEqual(pacman.kind_icon(name), icon, name)
+
+
+class SingleUpdate(unittest.TestCase):
+    def test_command(self):
+        self.assertEqual(pacman.install_urls_command(['https://m/x.pkg.tar.zst']),
+                         ['pkexec', 'pacman', '-U', '--noconfirm', 'https://m/x.pkg.tar.zst'])
