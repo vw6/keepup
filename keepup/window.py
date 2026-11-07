@@ -296,55 +296,74 @@ class DownloadRow(Gtk.Box):
             self.bar.set_fraction(op.overall.value)
 
 
-class Downloads(Gtk.MenuButton):
-    """Кнопка загрузок, как в браузере: крутится, пока идёт действие, подсвечивается, когда есть непросмотренный итог."""
-    def __init__(self):
-        super().__init__(tooltip_text='Загрузки и действия')
-        self.icon = Gtk.Image(icon_name='folder-download-symbolic')
-        self.spinner = Adw.Spinner(width_request=16, height_request=16)
-        self.set_child(self.icon)
-        self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+class DownloadsPage(Gtk.Stack):
+    """Вкладка «Загрузки»: все действия этого запуска, новые сверху, у каждого этап, полоска и своя консоль."""
+    def __init__(self, on_change):
+        super().__init__()
+        self.on_change = on_change
+        self.ops = []
+        self.add_named(Adw.StatusPage(icon_name='folder-download-symbolic', title='Пока пусто',
+                                      description='Здесь будут обновления, установки и удаления, запущенные в KeepUp.'), 'empty')
+        self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, valign=Gtk.Align.START)
         self.list.add_css_class('boxed-list')
-        self.empty = Adw.StatusPage(icon_name='folder-download-symbolic', title='Пока пусто',
-                                    description='Здесь будут обновления, установки и удаления, запущенные в этом окне.')
-        self.empty.add_css_class('compact')
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin_top=8, margin_bottom=8, margin_start=8, margin_end=8,
-                      width_request=440)
-        heading = Gtk.Label(label='Загрузки', xalign=0)
-        heading.add_css_class('heading')
-        box.append(heading)
-        box.append(self.empty)
-        box.append(self.list)
-        scroll = Gtk.ScrolledWindow(child=box, propagate_natural_height=True, propagate_natural_width=True, max_content_height=560,
-                                    hscrollbar_policy=Gtk.PolicyType.NEVER)
-        popover = Gtk.Popover(child=scroll)
-        popover.connect('show', lambda *_: self.remove_css_class('accent'))
-        self.set_popover(popover)
-        self.list.set_visible(False)
+        page = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True,
+                                  child=Adw.Clamp(maximum_size=760, margin_top=24, margin_bottom=24, margin_start=12, margin_end=12,
+                                                  child=self.list))
+        self.add_named(page, 'list')
+        self.set_visible_child_name('empty')
 
     def add(self, op):
-        row = DownloadRow(op, self._remove)
-        self.list.prepend(row)
-        self.list.set_visible(True)
-        self.empty.set_visible(False)
-        op.listen(self._update)
+        self.ops.append(op)
+        self.list.prepend(DownloadRow(op, self._remove))
+        self.set_visible_child_name('list')
+        op.listen(lambda _op: self.on_change())
 
     def _remove(self, row):
+        self.ops.remove(row.op)
         self.list.remove(row.get_parent())
-        if self.list.get_first_child() is None:
-            self.list.set_visible(False)
-            self.empty.set_visible(True)
+        if not self.ops:
+            self.set_visible_child_name('empty')
+        self.on_change()
 
-    def _update(self, _op):
-        rows = []
-        child = self.list.get_first_child()
-        while child is not None:
-            rows.append(child.get_child())
-            child = child.get_next_sibling()
-        running = any(not r.op.finished for r in rows)
-        self.set_child(self.spinner if running else self.icon)
-        if not running and _op.finished and not self.get_popover().get_visible():
-            self.add_css_class('accent')
+    def running(self):
+        return [op for op in self.ops if not op.finished]
+
+
+class SidebarDownloads(Gtk.Box):
+    """Пункт «Загрузки» внизу боковой панели: крутится и показывает ход, пока что-то идёт."""
+    def __init__(self):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin_top=8, margin_bottom=8, margin_start=6, margin_end=6)
+        top = Gtk.Box(spacing=12)
+        self.icon = Adw.Bin()
+        self.idle_icon = Gtk.Image(icon_name='folder-download-symbolic')
+        self.spinner = Adw.Spinner(width_request=16, height_request=16)
+        self.icon.set_child(self.idle_icon)
+        top.append(self.icon)
+        top.append(Gtk.Label(label='Загрузки', xalign=0, hexpand=True))
+        self.badge = Gtk.Label(visible=False)
+        self.badge.add_css_class('pill')
+        self.badge.add_css_class('info')
+        top.append(self.badge)
+        self.append(top)
+        self.bar = Gtk.ProgressBar(visible=False, margin_start=28)
+        self.append(self.bar)
+
+    def update(self, page):
+        running = page.running()
+        self.icon.set_child(self.spinner if running else self.idle_icon)
+        self.bar.set_visible(bool(running))
+        if running:
+            self.badge.set_label(f'идёт: {len(running)}')
+            self.badge.set_visible(True)
+            value = min(op.overall.value for op in running)
+            if value > 0:
+                self.bar.set_fraction(value)
+            else:
+                self.bar.pulse()
+        else:
+            failed = [op for op in page.ops if op.finished and op.code not in (0, 126, 127)]
+            self.badge.set_label('ошибка' if failed else '')
+            self.badge.set_visible(bool(failed))
 
 
 class Window(Adw.ApplicationWindow):
@@ -389,6 +408,7 @@ class Window(Adw.ApplicationWindow):
             holder = Adw.Bin()
             self.holders[key] = holder
             self.stack.add_named(holder, key)
+        self.stack.add_named(self.downloads, 'downloads')
         content.set_content(self.stack)
         # Карточка приложения или пакета открывается как страница поверх вкладки, со стрелкой «назад» в заголовке.
         self.nav = Adw.NavigationView(vexpand=True)
@@ -422,18 +442,45 @@ class Window(Adw.ApplicationWindow):
             r.page_key = key
             listbox.append(r)
         listbox.connect('row-selected', self.on_page_selected)
+        listbox.connect('row-activated', self.on_page_selected)
         self.sidebar_list = listbox
+        # «Загрузки» внизу панели, отдельно от вкладок: выбор в одном списке снимает выбор в другом.
+        self.downloads_entry = SidebarDownloads()
+        self.downloads_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
+        self.downloads_list.add_css_class('navigation-sidebar')
+        self.downloads_list.append(Gtk.ListBoxRow(child=self.downloads_entry))
+        self.downloads_list.connect('row-selected', self.on_downloads_selected)
+        # Повторный щелчок по уже выбранному пункту тоже открывает его, а не оставляет открытую карточку.
+        self.downloads_list.connect('row-activated', self.on_downloads_selected)
+        self.downloads = DownloadsPage(lambda: self.downloads_entry.update(self.downloads))
+        GLib.timeout_add(150, lambda: (self.downloads.running() and self.downloads_entry.update(self.downloads)) or True)
+        side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        side.append(Gtk.ScrolledWindow(child=listbox, vexpand=True))
+        side.append(Gtk.Separator())
+        side.append(self.downloads_list)
         view = Adw.ToolbarView()
-        side_header = Adw.HeaderBar()
-        self.downloads = Downloads()
-        side_header.pack_end(self.downloads)
-        view.add_top_bar(side_header)
-        view.set_content(Gtk.ScrolledWindow(child=listbox, vexpand=True))
+        view.add_top_bar(Adw.HeaderBar())
+        view.set_content(side)
         return view
+
+    def on_downloads_selected(self, _box, r):
+        if r is None:
+            return
+        self.sidebar_list.unselect_all()
+        self.nav.pop_to_tag('root')
+        self.stack.set_visible_child_name('downloads')
+        self.content_title.set_title('Загрузки')
+        self.content_page.set_title('Загрузки')
+        self.split.set_show_content(True)
+
+    def open_downloads(self):
+        self.downloads_list.select_row(self.downloads_list.get_row_at_index(0))
 
     def on_page_selected(self, _box, r):
         if r is None:
             return
+        if hasattr(self, 'downloads_list'):
+            self.downloads_list.unselect_all()
         if hasattr(self, 'nav'):
             self.nav.pop_to_tag('root')
         title = dict((k, t) for k, t, _ in PAGES)[r.page_key]
@@ -1849,7 +1896,7 @@ class Window(Adw.ApplicationWindow):
         self.downloads.add(self.operation)
         toast = Adw.Toast(timeout=4, use_markup=False, button_label='Показать')
         toast.set_title(f'{title}: начато')
-        toast.connect('button-clicked', lambda *_: self.downloads.popup())
+        toast.connect('button-clicked', lambda *_: self.open_downloads())
         self.toasts.add_toast(toast)
         page = self.nav.get_visible_page()
         anchor = self.anchors.get(page.get_tag()) if page else None
