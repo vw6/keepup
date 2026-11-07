@@ -3,6 +3,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import subprocess
 import urllib.parse
 import urllib.request
@@ -15,7 +16,7 @@ PARU_CLONE = os.path.expanduser('~/.cache/paru/clone')
 
 
 def available():
-    return subprocess.run(['which', 'paru'], capture_output=True, stdin=subprocess.DEVNULL).returncode == 0
+    return shutil.which('paru') is not None
 
 
 def foreign():

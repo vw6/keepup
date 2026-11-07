@@ -1,6 +1,7 @@
 """Приложения Flatpak: список, обновления и прошлые сборки из журнала удалённого хранилища для отката."""
 import os
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass
 
@@ -26,7 +27,7 @@ class Commit:
 
 
 def available():
-    return subprocess.run(['which', 'flatpak'], capture_output=True, stdin=subprocess.DEVNULL).returncode == 0
+    return shutil.which('flatpak') is not None
 
 
 def _run(args, timeout=60):

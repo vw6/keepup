@@ -6,7 +6,8 @@ pkgdesc="GNOME-style updates, versions and rollbacks for Arch, AUR and Flatpak"
 arch=('any')
 url="https://github.com/vw6/keepup"
 license=('GPL-3.0-or-later')
-depends=('python' 'python-gobject' 'gtk4' 'libadwaita' 'pacman' 'pacman-contrib' 'polkit')
+# libadwaita 1.7: Adw.ToggleGroup; GTK 4.10: Gtk.UriLauncher; checkupdates из pacman-contrib; pkexec из polkit.
+depends=('python>=3.10' 'python-gobject' 'gtk4>=1:4.10' 'libadwaita>=1:1.7' 'pacman' 'pacman-contrib' 'polkit')
 optdepends=('paru: AUR updates and builds'
             'flatpak: Flatpak applications'
             'translate-shell: translation of Arch news'
