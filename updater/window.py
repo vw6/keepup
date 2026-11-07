@@ -678,10 +678,17 @@ class Window(Adw.ApplicationWindow):
         page.add(top)
 
         program = Adw.PreferencesGroup(title='Что изменилось в программе')
-        changes = Gtk.Label(label='Ищем примечания к выпуску…', xalign=0, wrap=True, selectable=True)
+        changes = Gtk.Label(label='Ищем примечания к выпуску…', xalign=0, wrap=True, selectable=True,
+                            margin_top=14, margin_bottom=14, margin_start=16, margin_end=16)
         changes.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        program.add(changes)
+        # Текст лежит в своей карточке: строки-ссылки группа ставит списком выше прочего, поэтому они в отдельной группе ниже.
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        card.add_css_class('card')
+        card.append(changes)
+        program.add(card)
         page.add(program)
+        links = Adw.PreferencesGroup(visible=False)
+        page.add(links)
         build = Adw.PreferencesGroup(title='Что изменилось в сборке', description='Против прошлой правки PKGBUILD.')
         page.add(build)
         build.set_visible(False)
@@ -707,14 +714,16 @@ class Window(Adw.ApplicationWindow):
                     link = row('Открыть источник', result.link, activatable=True)
                     link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
                     link.connect('activated', lambda *_: Gtk.UriLauncher(uri=result.link).launch(self, None, None))
-                    program.add(link)
+                    links.add(link)
+                    links.set_visible(True)
             else:
                 changes.set_label('Примечаний к этой версии не нашлось: ни у самой программы, ни на Flathub, ни в выпусках GitHub.')
                 if local_url and local_url != 'None':
                     link = row('Сайт программы', local_url, activatable=True)
                     link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
                     link.connect('activated', lambda *_: Gtk.UriLauncher(uri=local_url).launch(self, None, None))
-                    program.add(link)
+                    links.add(link)
+                    links.set_visible(True)
             if result.build_changes:
                 build.set_visible(True)
                 for change in result.build_changes:
@@ -1107,6 +1116,7 @@ def markdown_markup(text):
             body = GLib.markup_escape_text(line)
         body = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', body)
         body = re.sub(r'`([^`]+)`', r'<tt>\1</tt>', body)
+        body = re.sub(r'(?<![*\w])\*(?!\s)([^*]+?)(?<!\s)\*(?![*\w])', r'<i>\1</i>', body)
         lines.append(body)
     return re.sub(r'\n{3,}', '\n\n', '\n'.join(lines)).strip()
 
