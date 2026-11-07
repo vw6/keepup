@@ -255,8 +255,10 @@ class OperationBar(Gtk.Box):
         self.console_button.add_css_class('flat')
         self.console_button.connect('toggled', self._toggle_console)
         row_box.append(self.console_button)
-        self.close_button = Gtk.Button(icon_name='window-close-symbolic', tooltip_text='Убрать', valign=Gtk.Align.CENTER, visible=False)
-        self.close_button.add_css_class('flat')
+        # Словом, а не крестиком: крестик рядом с краем окна легко принять за закрытие всей программы.
+        self.close_button = Gtk.Button(label='Скрыть', tooltip_text='Убрать эту строку; программа остаётся открытой',
+                                       valign=Gtk.Align.CENTER, visible=False)
+        self.close_button.add_css_class('pill')
         self.close_button.connect('clicked', lambda *_: self.hide_bar())
         row_box.append(self.close_button)
         self.append(row_box)
@@ -302,6 +304,9 @@ class OperationBar(Gtk.Box):
             self.stage.set_label(op.result() + ('' if ok or op.code in (126, 127) else f' (код {op.code}); подробности в консоли'))
             if ok:
                 self.bar.set_fraction(1.0)
+                # Успех убирается сам, если консоль не открыта; ошибка остаётся, пока её не скроют.
+                GLib.timeout_add_seconds(8, lambda: (op is self.op and not self.console.get_reveal_child()
+                                                     and self.hide_bar()) and False)
             elif op.code not in (126, 127):
                 self.console_button.set_active(True)
             self.close_button.set_visible(True)
