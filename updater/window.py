@@ -479,7 +479,7 @@ class Window(Adw.ApplicationWindow):
             link.connect('activated', lambda *_: Gtk.UriLauncher(uri=item.link).launch(self, None, None))
             links.add(link)
             page.add(links)
-        self.nav.push(nav_page)
+        self.push_page(nav_page)
 
         def show(lang):
             if lang == 'en' or not can:
@@ -741,7 +741,7 @@ class Window(Adw.ApplicationWindow):
             site.connect('activated', lambda *_: Gtk.UriLauncher(uri=local['URL']).launch(self, None, None))
             details.add(site)
         page.add(details)
-        self.nav.push(dialog)
+        self.push_page(dialog)
 
         def show_rpc(result):
             aur_group.remove(aur_wait)
@@ -795,6 +795,11 @@ class Window(Adw.ApplicationWindow):
                 log_group.add(r)
 
         background(lambda: aur.rpc_info([name]), show_rpc)
+
+    def push_page(self, nav_page):
+        self.nav.push(nav_page)
+        # GTK ставит фокус на первый текст, который можно выделять, и выделяет его целиком; фокус убираем.
+        GLib.idle_add(lambda: self.set_focus(None) or False)
 
     def detail_page(self, title, page):
         view = Adw.ToolbarView()
@@ -858,7 +863,7 @@ class Window(Adw.ApplicationWindow):
                                            'Тогда система не изменится.'))
         about.add(row('Потом', 'кнопка «Обновить AUR» снова поставит новейшую версию.'))
         page.add(about)
-        self.nav.push(nav_page)
+        self.push_page(nav_page)
 
         def show(result):
             go.set_sensitive(True)
@@ -1045,7 +1050,7 @@ class Window(Adw.ApplicationWindow):
             site.connect('activated', lambda *_: Gtk.UriLauncher(uri=info.homepage).launch(self, None, None))
             details.add(site)
         page.add(details)
-        self.nav.push(dialog)
+        self.push_page(dialog)
 
     def confirm_app_update(self, parent, app):
         ask = Adw.AlertDialog(heading=f'Обновить {self.app_name(app)}?',
@@ -1332,7 +1337,7 @@ class Window(Adw.ApplicationWindow):
             site.connect('activated', lambda *_: Gtk.UriLauncher(uri=local['URL']).launch(self, None, None))
             details.add(site)
         page.add(details)
-        self.nav.push(nav_page)
+        self.push_page(nav_page)
 
         def show_versions(archived):
             versions_group.remove(wait)
@@ -1460,7 +1465,7 @@ class Window(Adw.ApplicationWindow):
         warn = Adw.PreferencesGroup()
         warn.add(row('Обновление вернёт новейшую', 'следующее обновление системы снова поставит версию из репозитория'))
         page.add(warn)
-        self.nav.push(nav_page)
+        self.push_page(nav_page)
 
         def show_notes(result):
             if isinstance(result, Exception) or not result.text:
