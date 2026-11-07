@@ -650,51 +650,75 @@ class Window(Adw.ApplicationWindow):
         self.nav.pop_to_tag('root')
 
     def confirm_aur_build(self, name, base, commit, prev, title, date):
+        """Страница версии из правки AUR: примечания к выпуску, изменения сборки и кнопка сборки."""
         files = self.snap.foreign_files.get(name, [])
         local_url = aur.local_info(name).get('URL', '')
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        version = Gtk.Label(xalign=0, wrap=True)
-        version.add_css_class('heading')
-        box.append(version)
+        page = Adw.PreferencesPage()
+        nav_page = self.detail_page(f'{name}: правка от {date}', page)
+
+        head = Gtk.Box(spacing=18, margin_bottom=6)
+        head.append(_pkg_icon(aur.desktop_icon(files), 72))
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER, hexpand=True)
+        heading = Gtk.Label(label=name, xalign=0, wrap=True)
+        heading.add_css_class('title-1')
+        text.append(heading)
+        sub = Gtk.Label(label=f'Правка от {date}: «{title}»', xalign=0, wrap=True)
+        sub.add_css_class('dim-label')
+        text.append(sub)
+        head.append(text)
+        go = Gtk.Button(label='Собрать и поставить', valign=Gtk.Align.CENTER, sensitive=False)
+        go.add_css_class('suggested-action')
+        go.add_css_class('pill')
+        installed = set(self.snap.packages)
+        go.connect('clicked', lambda *_: (self.nav.pop_to_tag('root'), self.run_op(
+            f'Сборка {name} ({date})', aur.build_commands(base, commit, installed))))
+        head.append(go)
+        top = Adw.PreferencesGroup()
+        top.add(head)
+        page.add(top)
+
+        program = Adw.PreferencesGroup(title='Что изменилось в программе')
         changes = Gtk.Label(label='Ищем примечания к выпуску…', xalign=0, wrap=True, selectable=True)
         changes.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        scroll = Gtk.ScrolledWindow(child=changes, propagate_natural_height=True, max_content_height=320,
-                                    hscrollbar_policy=Gtk.PolicyType.NEVER)
-        box.append(scroll)
-        source = Gtk.Label(xalign=0, wrap=True)
-        source.add_css_class('dim-label')
-        source.add_css_class('caption')
-        box.append(source)
-        build = Gtk.Label(xalign=0, wrap=True)
-        build.add_css_class('caption')
-        box.append(build)
-
-        ask = Adw.AlertDialog(heading=f'Собрать {name} из правки от {date}?',
-                              body=f'«{title}». Пакет соберётся на этом компьютере и встанет вместо нынешнего; установку подтвердите '
-                                   'паролем. Старые версии иногда не собираются: файлы программы могли пропасть с сайта автора.')
-        ask.set_extra_child(box)
-        ask.add_response('cancel', 'Отмена')
-        ask.add_response('go', 'Собрать и поставить')
-        ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
-        ask.set_default_response('cancel')
-        installed = set(self.snap.packages)
-        ask.connect('response', lambda _d, resp: resp == 'go' and (self.nav.pop_to_tag('root'), self.run_op(
-            f'Сборка {name} ({date})', aur.build_commands(base, commit, installed))))
-        ask.present(self)
+        program.add(changes)
+        page.add(program)
+        build = Adw.PreferencesGroup(title='Что изменилось в сборке', description='Против прошлой правки PKGBUILD.')
+        page.add(build)
+        build.set_visible(False)
+        about = Adw.PreferencesGroup(title='Перед сборкой')
+        about.add(row('Как это пройдёт', 'PKGBUILD этой правки скачается из AUR, пакет соберётся на этом компьютере и встанет вместо '
+                                         'нынешнего; установку подтвердите паролем. Ход сборки будет виден в окне.'))
+        about.add(row('Если не соберётся', 'старые версии иногда не собираются: файлы программы могли пропасть с сайта автора. '
+                                           'Тогда система не изменится.'))
+        about.add(row('Потом', 'кнопка «Обновить AUR» снова поставит новейшую версию.'))
+        page.add(about)
+        self.nav.push(nav_page)
 
         def show(result):
+            go.set_sensitive(True)
             if isinstance(result, Exception):
                 changes.set_label(f'Примечания не загрузились: {result}')
                 return
-            version.set_label(f'Версия {result.version}')
+            heading.set_label(f'{name} {result.version}')
             if result.text:
                 changes.set_markup(markdown_markup(result.text))
-                source.set_label('Источник: ' + result.source + (f' · {result.link}' if result.link else ''))
+                program.set_description('Источник: ' + result.source)
+                if result.link:
+                    link = row('Открыть источник', result.link, activatable=True)
+                    link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
+                    link.connect('activated', lambda *_: Gtk.UriLauncher(uri=result.link).launch(self, None, None))
+                    program.add(link)
             else:
-                changes.set_label('Примечаний к этой версии не нашлось: ни у самой программы, ни на Flathub, ни в выпусках GitHub.'
-                                  + (f' Список изменений обычно есть на сайте программы: {local_url}' if local_url and local_url != 'None' else ''))
+                changes.set_label('Примечаний к этой версии не нашлось: ни у самой программы, ни на Flathub, ни в выпусках GitHub.')
+                if local_url and local_url != 'None':
+                    link = row('Сайт программы', local_url, activatable=True)
+                    link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
+                    link.connect('activated', lambda *_: Gtk.UriLauncher(uri=local_url).launch(self, None, None))
+                    program.add(link)
             if result.build_changes:
-                build.set_label('В сборке: ' + '; '.join(result.build_changes) + '.')
+                build.set_visible(True)
+                for change in result.build_changes:
+                    build.add(row(change))
 
         background(lambda: notes.collect(name, base, commit, prev, local_url, aur.metainfo_file(files)), show)
 
