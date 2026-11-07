@@ -225,102 +225,126 @@ class InlineProgress(Gtk.Box):
             self.bar.set_fraction(op.overall.value)
 
 
-class OperationBar(Gtk.Box):
-    """Строка хода внизу окна, видна на любой вкладке и странице; «Консоль» раскрывает весь вывод над ней."""
-    def __init__(self):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL)
-        self.op = None
-        self.view = Gtk.TextView(editable=False, cursor_visible=False, monospace=True, wrap_mode=Gtk.WrapMode.WORD_CHAR,
-                                 top_margin=10, bottom_margin=10, left_margin=12, right_margin=12)
-        self.scroll = Gtk.ScrolledWindow(child=self.view, min_content_height=260, max_content_height=260)
-        self.scroll.add_css_class('view')
-        self.console = Gtk.Revealer(child=self.scroll, transition_type=Gtk.RevealerTransitionType.SLIDE_UP)
-        self.append(self.console)
-        self.append(Gtk.Separator())
-        row_box = Gtk.Box(spacing=14, margin_top=10, margin_bottom=10, margin_start=16, margin_end=12)
+class DownloadRow(Gtk.Box):
+    """Действие в меню загрузок: значок состояния, название, этап, полоска, своя консоль с полным выводом."""
+    def __init__(self, op, on_remove):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=10, margin_bottom=10, margin_start=12, margin_end=12)
+        self.op = op
+        top = Gtk.Box(spacing=12)
         self.icon = Adw.Bin(valign=Gtk.Align.CENTER)
-        row_box.append(self.icon)
-        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, hexpand=True, valign=Gtk.Align.CENTER)
-        self.title = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END)
-        self.title.add_css_class('heading')
+        top.append(self.icon)
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
+        title = Gtk.Label(label=op.title, xalign=0, ellipsize=Pango.EllipsizeMode.END)
+        title.add_css_class('heading')
         self.stage = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.MIDDLE)
         self.stage.add_css_class('dim-label')
         self.stage.add_css_class('caption')
-        self.bar = Gtk.ProgressBar()
-        for w in (self.title, self.stage, self.bar):
-            text.append(w)
-        row_box.append(text)
+        text.append(title)
+        text.append(self.stage)
+        top.append(text)
         self.console_button = Gtk.ToggleButton(icon_name='utilities-terminal-symbolic', tooltip_text='Консоль: весь вывод с начала',
                                                valign=Gtk.Align.CENTER)
         self.console_button.add_css_class('flat')
-        self.console_button.connect('toggled', self._toggle_console)
-        row_box.append(self.console_button)
-        # Словом, а не крестиком: крестик рядом с краем окна легко принять за закрытие всей программы.
-        self.close_button = Gtk.Button(label='Скрыть', tooltip_text='Убрать эту строку; программа остаётся открытой',
-                                       valign=Gtk.Align.CENTER, visible=False)
-        self.close_button.add_css_class('pill')
-        self.close_button.connect('clicked', lambda *_: self.hide_bar())
-        row_box.append(self.close_button)
-        self.append(row_box)
-        self.revealer = None
-
-    def attach(self, op, revealer):
-        self.op = op
-        self.revealer = revealer
-        self.view.set_buffer(op.buffer)
-        self.title.set_label(op.title)
-        self.icon.set_child(Adw.Spinner(width_request=24, height_request=24))
-        self.close_button.set_visible(False)
-        self.bar.set_fraction(0)
-        self.console_button.set_active(False)
-        revealer.set_reveal_child(True)
-        GLib.timeout_add(120, self._pulse, op)
+        self.console_button.connect('toggled', self._toggle)
+        top.append(self.console_button)
+        self.remove_button = Gtk.Button(icon_name='user-trash-symbolic', tooltip_text='Убрать из списка', valign=Gtk.Align.CENTER,
+                                        visible=False)
+        self.remove_button.add_css_class('flat')
+        self.remove_button.connect('clicked', lambda *_: on_remove(self))
+        top.append(self.remove_button)
+        self.append(top)
+        self.bar = Gtk.ProgressBar()
+        self.append(self.bar)
+        view = Gtk.TextView(buffer=op.buffer, editable=False, cursor_visible=False, monospace=True, wrap_mode=Gtk.WrapMode.WORD_CHAR,
+                            top_margin=8, bottom_margin=8, left_margin=8, right_margin=8)
+        self.scroll = Gtk.ScrolledWindow(child=view, min_content_height=220, max_content_height=220)
+        self.scroll.add_css_class('card')
+        self.console = Gtk.Revealer(child=self.scroll)
+        self.append(self.console)
+        GLib.timeout_add(120, self._pulse)
         op.listen(self._show)
 
-    def _pulse(self, op):
-        if op is self.op and not op.finished and op.overall.value <= 0:
-            self.bar.pulse()
-        return op is self.op and not op.finished
-
-    def _toggle_console(self, button):
+    def _toggle(self, button):
         self.console.set_reveal_child(button.get_active())
-        # Прокрутить к концу, когда панель уже раскрылась и знает свою высоту.
         GLib.timeout_add(self.console.get_transition_duration() + 50, lambda: self._scroll_end() and False)
 
     def _scroll_end(self):
         adj = self.scroll.get_vadjustment()
-        GLib.idle_add(lambda: adj.set_value(adj.get_upper()))
+        adj.set_value(adj.get_upper())
+
+    def _pulse(self):
+        if not self.op.finished and self.op.overall.value <= 0:
+            self.bar.pulse()
+        return not self.op.finished
 
     def _show(self, op):
-        if op is not self.op:
-            return
         if self.console.get_reveal_child():
-            self._scroll_end()
+            GLib.idle_add(lambda: self._scroll_end() and False)
         if op.finished:
             ok = op.code == 0
-            icon = Gtk.Image(icon_name='object-select-symbolic' if ok else 'dialog-error-symbolic', pixel_size=24)
+            icon = Gtk.Image(icon_name='object-select-symbolic' if ok else 'dialog-error-symbolic')
             icon.add_css_class('success' if ok else 'error')
             self.icon.set_child(icon)
-            self.stage.set_label(op.result() + ('' if ok or op.code in (126, 127) else f' (код {op.code}); подробности в консоли'))
-            if ok:
-                self.bar.set_fraction(1.0)
-                # Успех убирается сам, если консоль не открыта; ошибка остаётся, пока её не скроют.
-                GLib.timeout_add_seconds(8, lambda: (op is self.op and not self.console.get_reveal_child()
-                                                     and self.hide_bar()) and False)
-            elif op.code not in (126, 127):
-                self.console_button.set_active(True)
-            self.close_button.set_visible(True)
+            self.stage.set_label(op.result() + ('' if ok or op.code in (126, 127) else f' (код {op.code}), подробности в консоли'))
+            self.bar.set_visible(False)
+            self.remove_button.set_visible(True)
             return
+        if not isinstance(self.icon.get_child(), Adw.Spinner):
+            self.icon.set_child(Adw.Spinner(width_request=16, height_request=16))
         self.stage.set_label(op.state.stage + '…' + (f'  ·  {op.state.detail}' if op.state.detail else ''))
         if op.overall.value > 0:
             self.bar.set_fraction(op.overall.value)
 
-    def hide_bar(self):
-        if self.op and not self.op.finished:
-            return
-        self.console_button.set_active(False)
-        if self.revealer:
-            self.revealer.set_reveal_child(False)
+
+class Downloads(Gtk.MenuButton):
+    """Кнопка загрузок, как в браузере: крутится, пока идёт действие, подсвечивается, когда есть непросмотренный итог."""
+    def __init__(self):
+        super().__init__(tooltip_text='Загрузки и действия')
+        self.icon = Gtk.Image(icon_name='folder-download-symbolic')
+        self.spinner = Adw.Spinner(width_request=16, height_request=16)
+        self.set_child(self.icon)
+        self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        self.list.add_css_class('boxed-list')
+        self.empty = Adw.StatusPage(icon_name='folder-download-symbolic', title='Пока пусто',
+                                    description='Здесь будут обновления, установки и удаления, запущенные в этом окне.')
+        self.empty.add_css_class('compact')
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin_top=8, margin_bottom=8, margin_start=8, margin_end=8,
+                      width_request=440)
+        heading = Gtk.Label(label='Загрузки', xalign=0)
+        heading.add_css_class('heading')
+        box.append(heading)
+        box.append(self.empty)
+        box.append(self.list)
+        scroll = Gtk.ScrolledWindow(child=box, propagate_natural_height=True, propagate_natural_width=True, max_content_height=560,
+                                    hscrollbar_policy=Gtk.PolicyType.NEVER)
+        popover = Gtk.Popover(child=scroll)
+        popover.connect('show', lambda *_: self.remove_css_class('accent'))
+        self.set_popover(popover)
+        self.list.set_visible(False)
+
+    def add(self, op):
+        row = DownloadRow(op, self._remove)
+        self.list.prepend(row)
+        self.list.set_visible(True)
+        self.empty.set_visible(False)
+        op.listen(self._update)
+
+    def _remove(self, row):
+        self.list.remove(row.get_parent())
+        if self.list.get_first_child() is None:
+            self.list.set_visible(False)
+            self.empty.set_visible(True)
+
+    def _update(self, _op):
+        rows = []
+        child = self.list.get_first_child()
+        while child is not None:
+            rows.append(child.get_child())
+            child = child.get_next_sibling()
+        running = any(not r.op.finished for r in rows)
+        self.set_child(self.spinner if running else self.icon)
+        if not running and _op.finished and not self.get_popover().get_visible():
+            self.add_css_class('accent')
 
 
 class Window(Adw.ApplicationWindow):
@@ -369,15 +393,9 @@ class Window(Adw.ApplicationWindow):
         # Карточка приложения или пакета открывается как страница поверх вкладки, со стрелкой «назад» в заголовке.
         self.nav = Adw.NavigationView(vexpand=True)
         self.nav.add(Adw.NavigationPage(title=PAGES[0][1], tag='root', child=content))
-        # Ход действия показывается внизу правой части, под любой открытой страницей, без отдельного окна.
-        self.op_bar = OperationBar()
-        self.op_revealer = Gtk.Revealer(child=self.op_bar, transition_type=Gtk.RevealerTransitionType.SLIDE_UP)
         self.operation = None
         self.anchors = {}
-        right = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        right.append(self.nav)
-        right.append(self.op_revealer)
-        self.content_page = Adw.NavigationPage(title=PAGES[0][1], child=right)
+        self.content_page = Adw.NavigationPage(title=PAGES[0][1], child=self.nav)
         split.set_content(self.content_page)
         self.split = split
 
@@ -406,7 +424,10 @@ class Window(Adw.ApplicationWindow):
         listbox.connect('row-selected', self.on_page_selected)
         self.sidebar_list = listbox
         view = Adw.ToolbarView()
-        view.add_top_bar(Adw.HeaderBar())
+        side_header = Adw.HeaderBar()
+        self.downloads = Downloads()
+        side_header.pack_end(self.downloads)
+        view.add_top_bar(side_header)
         view.set_content(Gtk.ScrolledWindow(child=listbox, vexpand=True))
         return view
 
@@ -1825,7 +1846,11 @@ class Window(Adw.ApplicationWindow):
             if code == 0:
                 self.refresh()
         self.operation = Operation(title, cmd, done)
-        self.op_bar.attach(self.operation, self.op_revealer)
+        self.downloads.add(self.operation)
+        toast = Adw.Toast(timeout=4, use_markup=False, button_label='Показать')
+        toast.set_title(f'{title}: начато')
+        toast.connect('button-clicked', lambda *_: self.downloads.popup())
+        self.toasts.add_toast(toast)
         page = self.nav.get_visible_page()
         anchor = self.anchors.get(page.get_tag()) if page else None
         if anchor is not None and anchor.get_parent() is not None:
