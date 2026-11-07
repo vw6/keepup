@@ -579,6 +579,11 @@ class Window(Adw.ApplicationWindow):
         builds.add_css_class('pill')
         builds.connect('clicked', lambda *_: self.ask_flatpak(app))
         buttons.append(builds)
+        remove = Gtk.Button(label='Удалить')
+        remove.add_css_class('destructive-action')
+        remove.add_css_class('pill')
+        remove.connect('clicked', lambda *_: self.confirm_app_remove(dialog, app))
+        buttons.append(remove)
         head.append(buttons)
         top = Adw.PreferencesGroup()
         top.add(head)
@@ -650,6 +655,26 @@ class Window(Adw.ApplicationWindow):
         ask.set_default_response('cancel')
         ask.connect('response', lambda _d, resp: resp == 'go' and (parent.close(), self.run_op(
             f'Обновление {self.app_name(app)}', flatpak.update_one_command(app), pacman_lock=False)))
+        ask.present(parent)
+
+    def confirm_app_remove(self, parent, app):
+        name = self.app_name(app)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        group = Adw.PreferencesGroup()
+        data = Adw.SwitchRow(title='Удалить и данные приложения', subtitle=f'настройки и файлы в ~/.var/app/{app.app_id}')
+        unused = Adw.SwitchRow(title='Убрать ненужные среды', subtitle='среды выполнения, которыми больше не пользуется ни одно приложение',
+                               active=True)
+        group.add(data)
+        group.add(unused)
+        box.append(group)
+        ask = Adw.AlertDialog(heading=f'Удалить {name}?', body='Приложение пропадёт из системы. Без данных его можно поставить заново как было.')
+        ask.set_extra_child(box)
+        ask.add_response('cancel', 'Отмена')
+        ask.add_response('go', 'Удалить')
+        ask.set_response_appearance('go', Adw.ResponseAppearance.DESTRUCTIVE)
+        ask.set_default_response('cancel')
+        ask.connect('response', lambda _d, resp: resp == 'go' and (parent.close(), self.run_op(
+            f'Удаление {name}', flatpak.uninstall_commands(app, data.get_active(), unused.get_active()), pacman_lock=False)))
         ask.present(parent)
 
     def ask_flatpak(self, app):

@@ -91,3 +91,13 @@ class AppStream(unittest.TestCase):
         self.assertEqual((info.releases[0].version, info.releases[0].text), ('2.0', 'New'))
         en = appstream.parse_component(ET.fromstring(self.XML), 'de')
         self.assertEqual(en.description, 'One two\n\n• a')
+
+
+class Uninstall(unittest.TestCase):
+    def test_commands(self):
+        app = flatpak.App('ai.storyteller.artcraft-launcher', 'ArtCraft Launcher', '0.2.1', 'stable', 'artcraft-launcher-origin', 'system')
+        self.assertEqual(flatpak.uninstall_commands(app), [['flatpak', 'uninstall', '-y', '--noninteractive', '--system',
+                                                            'ai.storyteller.artcraft-launcher//stable']])
+        both = flatpak.uninstall_commands(app, delete_data=True, unused=True)
+        self.assertIn('--delete-data', both[0])
+        self.assertEqual(both[1][-1], '--unused')

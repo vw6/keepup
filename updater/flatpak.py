@@ -100,6 +100,15 @@ def update_one_command(app):
     return ['flatpak', 'update', '-y', '--noninteractive', f'--{app.installation}', f'{app.app_id}//{app.branch}']
 
 
+def uninstall_commands(app, delete_data=False, unused=False):
+    """Удаление приложения; по желанию с его данными в ~/.var/app и со средами, которые больше никому не нужны."""
+    cmds = [['flatpak', 'uninstall', '-y', '--noninteractive', f'--{app.installation}', *(['--delete-data'] if delete_data else []),
+             f'{app.app_id}//{app.branch}']]
+    if unused:
+        cmds.append(['flatpak', 'uninstall', '-y', '--noninteractive', f'--{app.installation}', '--unused'])
+    return cmds
+
+
 def checkout_command(app, commit):
     # Конкретную сборку в системную установку flatpak ставит только от root. Среды и переводы не трогаются:
     # меняется одно приложение.
