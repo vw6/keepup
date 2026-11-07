@@ -79,6 +79,7 @@ class Snapshot:
         self.boot_order = []
         self.app_info = {}
         self.foreign_files = {}
+        self.icons = {}
 
     @classmethod
     def collect(cls):
@@ -97,6 +98,7 @@ class Snapshot:
             s.reboot = pacman.reboot_reasons(s.log, pacman.boot_time())
             s.foreign = aur.foreign()
             s.foreign_files = aur.files_of(list(s.foreign)) if s.foreign else {}
+            s.icons = pacman.desktop_icons()
             s.repo_kernels = kernels.available(set(s.packages))
             s.boot_order = kernels.boot_order()
             s.updates, s.updates_error = _result(repo)
@@ -365,6 +367,7 @@ class Window(Adw.ApplicationWindow):
             upd.set_header_suffix(button)
             for u in sorted(s.updates, key=lambda u: (not u.needs_reboot, u.name)):
                 r = row(u.name, f'{u.old}  →  {u.new}', activatable=True)
+                r.add_prefix(_pkg_icon(self.icon_for(u.name), 32))
                 if u.needs_reboot:
                     r.add_suffix(pill('перезагрузка', 'warn'))
                 r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
@@ -401,6 +404,7 @@ class Window(Adw.ApplicationWindow):
         for pkg in candidates[:ROLLBACK_ROWS]:
             r = row(pkg.name, f'установлена {pkg.version} · в кэше версий: {len(pkg.cached)}', activatable=True)
             r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+            r.add_prefix(_pkg_icon(self.icon_for(pkg.name), 32))
             r.connect('activated', lambda _r, name=pkg.name: self.show_pkg(name))
             self.rollback_group.add(r)
             self.rollback_rows.append(r)
@@ -498,9 +502,14 @@ class Window(Adw.ApplicationWindow):
         page.add(group)
         return page
 
+    def icon_for(self, name, files=None):
+        """Значок программы из её .desktop, иначе служебный по виду пакета."""
+        return (self.snap.icons.get(name) or aur.desktop_icon(files if files is not None else self.snap.foreign_files.get(name, []))
+                or pacman.kind_icon(name))
+
     def aur_row(self, name, subtitle):
         r = row(name, subtitle, activatable=True)
-        r.add_prefix(_pkg_icon(aur.desktop_icon(self.snap.foreign_files.get(name, [])), 32))
+        r.add_prefix(_pkg_icon(self.icon_for(name), 32))
         if any(u.name == name for u in self.snap.aur_updates):
             r.add_suffix(pill('есть обновление', 'info'))
         r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
@@ -519,7 +528,7 @@ class Window(Adw.ApplicationWindow):
         dialog = self.detail_page(name, page)
 
         head = Gtk.Box(spacing=18, margin_bottom=6)
-        head.append(_pkg_icon(aur.desktop_icon(files), 96))
+        head.append(_pkg_icon(self.icon_for(name, files), 96))
         text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER, hexpand=True)
         title = Gtk.Label(label=(meta.name if meta and meta.name else name), xalign=0, wrap=True)
         title.add_css_class('title-1')
@@ -661,7 +670,7 @@ class Window(Adw.ApplicationWindow):
         nav_page = self.detail_page(f'{name}: правка от {date}', page)
 
         head = Gtk.Box(spacing=18, margin_bottom=6)
-        head.append(_pkg_icon(aur.desktop_icon(files), 72))
+        head.append(_pkg_icon(self.icon_for(name, files), 72))
         text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER, hexpand=True)
         heading = Gtk.Label(label=name, xalign=0, wrap=True)
         heading.add_css_class('title-1')
@@ -984,6 +993,7 @@ class Window(Adw.ApplicationWindow):
         for k in found:
             exp = Adw.ExpanderRow(title=k.name, subtitle=f'установлено {k.version}' + (f' · запущено {release}' if k.name == running_base else ''))
             exp.set_use_markup(False)
+            exp.add_prefix(_pkg_icon('computer-symbolic', 32))
             if k.name == default:
                 exp.add_suffix(pill('основное', 'info'))
             if k.name == running_base:
@@ -1025,6 +1035,7 @@ class Window(Adw.ApplicationWindow):
             if k.installed:
                 continue
             r = row(k.name, f'{k.version} · {k.repo}' + (f' · {k.description}' if k.description else ''), activatable=True)
+            r.add_prefix(_pkg_icon('computer-symbolic', 32))
             r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
             r.connect('activated', lambda _r, kk=k: self.ask_install(kk.name, [kk.name, kk.name + '-headers', *kk.modules]))
             more.add(r)
@@ -1098,7 +1109,7 @@ class Window(Adw.ApplicationWindow):
         page = Adw.PreferencesPage()
         nav_page = self.detail_page(name, page)
         head = Gtk.Box(spacing=18, margin_bottom=6)
-        head.append(_pkg_icon(aur.desktop_icon(files), 96))
+        head.append(_pkg_icon(self.icon_for(name, files), 96))
         text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER, hexpand=True)
         title = Gtk.Label(label=(meta.name if meta and meta.name else name), xalign=0, wrap=True)
         title.add_css_class('title-1')
@@ -1237,7 +1248,7 @@ class Window(Adw.ApplicationWindow):
         page = Adw.PreferencesPage()
         nav_page = self.detail_page(f'{name} {version}', page)
         head = Gtk.Box(spacing=18, margin_bottom=6)
-        head.append(_pkg_icon(aur.desktop_icon(files), 72))
+        head.append(_pkg_icon(self.icon_for(name, files), 72))
         text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER, hexpand=True)
         heading = Gtk.Label(label=f'{name} {version}', xalign=0, wrap=True)
         heading.add_css_class('title-1')

@@ -152,3 +152,12 @@ class Markdown(unittest.TestCase):
         from updater.window import markdown_markup
         for text in ('- ***Android 7 and 8 unavailable***', '**a *b* c**', '## H & <x>', '`code` and *i*'):
             Pango.parse_markup(markdown_markup(text), -1, '\0')
+
+
+class KindIcons(unittest.TestCase):
+    def test_kinds(self):
+        cases = {'linux-cachyos': 'computer-symbolic', 'linux-cachyos-r8125': 'computer-symbolic', 'lib32-mesa': 'video-display-symbolic',
+                 'vulkan-radeon': 'video-display-symbolic', 'noto-fonts-emoji': 'font-x-generic-symbolic', 'python-pydantic': 'text-x-script-symbolic',
+                 'chaotic-keyring': 'security-high-symbolic', 'harfbuzz': 'package-x-generic-symbolic', 'libarchive': 'application-x-addon-symbolic'}
+        for name, icon in cases.items():
+            self.assertEqual(pacman.kind_icon(name), icon, name)

@@ -333,3 +333,50 @@ def repo_info(name):
 
 def remove_command(name, deps=True):
     return ['pkexec', 'pacman', '-R' + ('ns' if deps else 'n'), '--noconfirm', name]
+
+
+def desktop_icons(folder='/usr/share/applications'):
+    """Значки программ по пакетам: какой пакет владеет каким .desktop и что в нём в Icon= (одним вызовом pacman -Qo)."""
+    try:
+        files = [os.path.join(folder, f) for f in sorted(os.listdir(folder)) if f.endswith('.desktop')]
+    except OSError:
+        return {}
+    out = subprocess.run(['pacman', '-Qo', *files], capture_output=True, stdin=subprocess.DEVNULL, text=True,
+                         env={**os.environ, 'LC_ALL': 'C'})
+    icons = {}
+    for line in out.stdout.splitlines():
+        m = re.match(r'^(\S+) is owned by (\S+) ', line)
+        if not m or m.group(2) in icons:
+            continue
+        try:
+            with open(m.group(1), encoding='utf-8', errors='replace') as f:
+                for entry in f:
+                    if entry.startswith('Icon='):
+                        icons[m.group(2)] = entry[5:].strip()
+                        break
+        except OSError:
+            continue
+    return icons
+
+
+# Служебные значки по виду пакета, если своей программы с .desktop у пакета нет: первое подходящее правило.
+KIND_ICONS = [
+    (re.compile(r'^linux(-[a-z0-9]+)*$|-headers$|-r8125$|-r8168$|firmware|-ucode$|^limine|^grub|^mkinitcpio|^dracut'), 'computer-symbolic'),
+    (re.compile(r'mesa|vulkan|nvidia|^lib32-.*(gl|drm|vdpau|va)|^(lib)?drm|^libva|^xf86-|^xorg|wayland|^egl'), 'video-display-symbolic'),
+    (re.compile(r'^(lib32-)?(pipewire|wireplumber|pulse|alsa|jack)|sound|audio|^lib32-(alsa|pipewire)'), 'audio-x-generic-symbolic'),
+    (re.compile(r'^(ttf|otf|woff2?)-|fonts?(-|$)|^noto-'), 'font-x-generic-symbolic'),
+    (re.compile(r'^(python|python3|perl|ruby|lua|nodejs|npm|pnpm|php|go|rust|cargo|jdk|java|dotnet|tcl|uv)(-|$)'), 'text-x-script-symbolic'),
+    (re.compile(r'^(networkmanager|libnm|iwd|wpa_|openssh|openssl|nss|ca-certificates|curl|wget|gnutls|ppp|dnsmasq)'), 'network-wired-symbolic'),
+    (re.compile(r'^(gnupg|gpgme|sudo|polkit|pam|libsecret|keyring|.*-keyring$|apparmor)'), 'security-high-symbolic'),
+    (re.compile(r'^(systemd|dbus|util-linux|coreutils|glibc|filesystem|kmod|bash|zsh|fish|shadow|procps)'), 'emblem-system-symbolic'),
+    (re.compile(r'^(gcc|clang|llvm|cmake|make|binutils|meson|ninja|pkgconf|autoconf|automake|patch|fakeroot|debugedit|git)(-|$)'),
+     'applications-engineering-symbolic'),
+    (re.compile(r'^(lib32-)?lib|-libs?$|^qt[0-9]|^gtk|^glib|^kirigami|^electron'), 'application-x-addon-symbolic'),
+]
+
+
+def kind_icon(name):
+    for rule, icon in KIND_ICONS:
+        if rule.search(name):
+            return icon
+    return 'package-x-generic-symbolic'
