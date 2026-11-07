@@ -1,30 +1,53 @@
+<p align="center"><img src="data/icons/ru.vw6.KeepUp.svg" width="128" alt="KeepUp"></p>
+
 # KeepUp
 
-Окно обновлений для Arch и CachyOS в стиле GNOME (пакет `keepup`, команда `keepup`): обзор, новости Arch, пакеты с откатом из кэша pacman, ядра, история.
-Прототип на Python (GTK4 и libadwaita); если приживётся, переписывается на Rust.
+Окно обновлений для Arch Linux и CachyOS в стиле GNOME. *English below.*
 
-Запуск:
+## О проекте
+
+Это в первую очередь личный проект: я сделал его для себя, чтобы обновлять свою систему не из консоли и спокойно откатывать то, что не понравилось. Выкладываю как есть. Развитие, исправления и ответы на вопросы не гарантируются, хотя замечания и правки приветствуются.
+
+Программа написана примерно за час вместе с Claude Opus 5.5 (Anthropic): я ставил задачи и проверял результат, модель писала код. Это прототип на Python; если он приживётся, его планируется переписать на Rust.
+
+## Что умеет
+
+На вкладке «Обзор» видно, сколько обновлений ждёт в репозиториях, AUR и Flatpak, нужна ли перезагрузка и какие новости Arch стоит прочитать до обновления. Новости Arch показываются с пометкой, если касаются ваших пакетов, переводятся на русский через translate-shell (команды, версии и имена пакетов не переводятся) и сохраняются локально вместе с переводом.
+
+У каждого пакета, из репозиториев или из AUR, и у каждого приложения Flatpak есть своя страница: описание, снимки экрана, история версий и примечания к выпуску из самой программы, выпусков GitHub или каталога Flathub. Отсюда можно обновить один пакет, если это не тянет обновление общих библиотек, поставить любую прошлую версию из кэша pacman, архива Arch или правки PKGBUILD в AUR, удалить пакет. Пакеты одной сборки (например, все части mesa) ставятся и откатываются только вместе.
+
+Вкладка «Ядра» показывает установленные и доступные ядра, ставит ядро вместе с заголовками и модулями ваших устройств, подсказывает, если у запасного ядра не хватает модуля, и выбирает основное ядро в загрузчике Limine. Вкладка «История» раскладывает журнал pacman по дням.
+
+Все действия с правами root идут через стандартное окно пароля (pkexec). Пароль программа не видит.
+
+## Установка
+
+Из AUR:
 
 ```
-./run.sh
+paru -S keepup
 ```
 
-Проверки: `python3 -m unittest discover -s tests -t .`
+Из исходников:
 
-Действия с правами (обновление, другая версия пакета) идут через `pkexec`: пароль спрашивает окно GNOME, программа его не видит.
-Обновляется только всё сразу, без выборочного обновления: в Arch это частичное обновление. Откат ставит вместе пакеты
-одной сборки (pkgbase) и 32-разрядную пару; если у кого-то из них нужной версии в кэше нет, откат не предлагается.
+```
+make install DESTDIR=/ PREFIX=/usr
+```
 
-Вкладки AUR (paru: обновление без просмотра PKGBUILD, откат из сборок paru и кэша) и Flatpak (обновление, другая сборка
-из журнала хранилища только самого приложения, с подтверждением).
+Нужны python 3.10 или новее, python-gobject, gtk4 4.10 или новее, libadwaita 1.7 или новее, pacman-contrib и polkit. Необязательно: paru для AUR, flatpak, translate-shell для перевода новостей, git и base-devel для сборки прошлых версий из AUR, limine-mkinitcpio-hook для выбора основного ядра.
 
-Ядра: все ядра из подключённых репозиториев, установка вместе с заголовками и модулями устройств (r8125 и подобные),
-подсказка о недостающих модулях, «сделать основным» через BOOT_ORDER в /etc/default/limine и limine-update
-(помощник updater/helpers/set_default_kernel.py идёт через pkexec, прежние настройки копируются).
-`./run.sh --page kernels` открывает окно сразу на вкладке; `KEEPUP_SEPARATE=1` запускает отдельный экземпляр рядом с открытым окном.
+Для разработки: `./run.sh` запускает программу из каталога проекта, `./run.sh --page aur` открывает сразу нужную вкладку, `KEEPUP_SEPARATE=1` запускает второй экземпляр рядом с уже открытым окном, проверки запускаются командой `make test`. Данные программы лежат в `~/.cache/keepup`, `~/.local/share/keepup` (архив новостей с переводами) и `~/.config/keepup`.
 
-Дальше: версии из архива Arch (Arch Linux Archive), откат дня целиком из истории; в версии на Rust помощник от root
-ставится в систему с правилом polkit, а не запускается из каталога пользователя.
+## Лицензия
 
-Сборка пакета: `packaging/aur/PKGBUILD` (код берётся с GitHub по метке выпуска `vX.Y.Z`); установка без пакета: `make install DESTDIR=… PREFIX=/usr`.
-Данные программы: кэш `~/.cache/keepup`, архив новостей с переводами `~/.local/share/keepup/news`, настройки `~/.config/keepup`.
+[Mozilla Public License 2.0](LICENSE). Код можно свободно использовать, менять и включать в свои проекты, в том числе закрытые. Если вы распространяете изменённые файлы KeepUp, их исходный код нужно открыть под той же лицензией.
+
+---
+
+## English
+
+KeepUp is a GNOME-style update manager for Arch Linux and CachyOS: pending updates from the repositories, AUR and Flatpak, Arch news with optional machine translation and an offline archive, a page for every package with release notes, rollback to any previous version (pacman cache, Arch Linux Archive or an AUR commit), kernel management with Limine, and pacman history by day.
+
+This is primarily a personal project, published as is. Further development, fixes and support are not guaranteed. It was written in about an hour together with Claude Opus 5.5 (Anthropic) as a Python prototype that may later be rewritten in Rust.
+
+Licensed under the [Mozilla Public License 2.0](LICENSE): free to use, modify and include in other projects, including proprietary ones; modified KeepUp files must be published under the same license when distributed.
