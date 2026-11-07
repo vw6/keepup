@@ -141,3 +141,14 @@ class ReleaseNotes(unittest.TestCase):
         self.assertEqual(notes.version_of(new), '1:8.1.0-1')
         self.assertEqual(notes.compare_builds(old, new), ['новая зависимость: libxtst', 'убрана зависимость: libxss'])
         self.assertEqual(notes._plain_version('1:8.1.0-2'), '8.1.0')
+
+
+class Markdown(unittest.TestCase):
+    def test_markup_parses(self):
+        import gi
+        gi.require_version('Gtk', '4.0')
+        gi.require_version('Adw', '1')
+        from gi.repository import Pango
+        from updater.window import markdown_markup
+        for text in ('- ***Android 7 and 8 unavailable***', '**a *b* c**', '## H & <x>', '`code` and *i*'):
+            Pango.parse_markup(markdown_markup(text), -1, '\0')

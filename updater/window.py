@@ -708,7 +708,7 @@ class Window(Adw.ApplicationWindow):
                 return
             heading.set_label(f'{name} {result.version}')
             if result.text:
-                changes.set_markup(markdown_markup(result.text))
+                set_markup_or_text(changes, markdown_markup(result.text), result.text)
                 program.set_description('Источник: ' + result.source)
                 if result.link:
                     link = row('Открыть источник', result.link, activatable=True)
@@ -1101,6 +1101,16 @@ class Window(Adw.ApplicationWindow):
         OperationDialog(title, cmd, lambda code: code == 0 and self.refresh()).present(self)
 
 
+def set_markup_or_text(label, markup, text):
+    """Разметка, а если Pango её не принял, тот же текст без оформления: лучше просто, чем пусто."""
+    try:
+        Pango.parse_markup(markup, -1, '\0')
+    except GLib.Error:
+        label.set_label(text)
+        return
+    label.set_markup(markup)
+
+
 def markdown_markup(text):
     """Примечания с GitHub пишут в Markdown: заголовки жирным, пункты точками, остальное как есть, всё экранировано."""
     import re
@@ -1114,6 +1124,7 @@ def markdown_markup(text):
             body = '• ' + GLib.markup_escape_text(item.group(1))
         else:
             body = GLib.markup_escape_text(line)
+        body = re.sub(r'\*\*\*(.+?)\*\*\*', r'<b><i>\1</i></b>', body)
         body = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', body)
         body = re.sub(r'`([^`]+)`', r'<tt>\1</tt>', body)
         body = re.sub(r'(?<![*\w])\*(?!\s)([^*]+?)(?<!\s)\*(?![*\w])', r'<i>\1</i>', body)
