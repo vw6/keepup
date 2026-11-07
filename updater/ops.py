@@ -25,11 +25,15 @@ def install_files_command(paths):
 def run(cmd, on_line, on_done):
     """Запуск в отдельном потоке; on_line и on_done вызываются в главном потоке GTK.
     cmd это одна команда или список команд: они идут по очереди, пока какая-то не завершится с ошибкой."""
-    commands = cmd if cmd and isinstance(cmd[0], list) else [cmd]
+    commands = cmd if cmd and (isinstance(cmd[0], list) or callable(cmd[0])) else [cmd]
 
     def work():
         code = 0
         for one in commands:
+            # Команда может быть функцией: её вид известен только после предыдущих шагов.
+            if callable(one):
+                one = one()
+            GLib.idle_add(on_line, '$ ' + ' '.join(one))
             try:
                 proc = subprocess.Popen(one, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
                                         env={**os.environ, 'LC_ALL': os.environ.get('LANG', 'C.UTF-8')})

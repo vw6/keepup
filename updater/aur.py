@@ -2,6 +2,7 @@
 import glob
 import json
 import os
+import re
 import subprocess
 import urllib.parse
 import urllib.request
@@ -131,3 +132,44 @@ def update_one_command(name):
 def remove_command(name, deps=True):
     # -s убирает зависимости, которые ставились ради этого пакета и больше никому не нужны.
     return ['pkexec', 'pacman', '-R' + ('ns' if deps else 'n'), '--noconfirm', name]
+
+
+# Сборка любой прошлой версии: PKGBUILD берётся из git-хранилища пакета в AUR на нужной правке.
+
+AUR_GIT = 'https://aur.archlinux.org/{}.git'
+WORK = os.path.join(os.environ.get('XDG_CACHE_HOME', os.path.expanduser('~/.cache')), 'vw6-updater', 'aur')
+COMMIT_ID = re.compile(r'[?&]id=([0-9a-f]{7,40})')
+
+
+def commit_of(link):
+    m = COMMIT_ID.search(link or '')
+    return m.group(1) if m else None
+
+
+def built_packages(directory, installed):
+    """Собранные makepkg пакеты, из них только те, что сейчас установлены (у составных пакетов частей несколько)."""
+    out = subprocess.run(['makepkg', '--packagelist', '-D', directory], capture_output=True, stdin=subprocess.DEVNULL, text=True)
+    paths = [p for p in out.stdout.split() if os.path.exists(p)]
+    chosen = []
+    for path in paths:
+        name = os.path.basename(path).rsplit('-', 3)[0]
+        if name in installed:
+            chosen.append(path)
+    return chosen or paths
+
+
+def build_commands(base, commit, installed):
+    """Команды по очереди: получить хранилище, перейти на правку, собрать, поставить через pkexec.
+    Последняя команда строится после сборки, когда известны имена файлов."""
+    directory = os.path.join(WORK, base)
+    get = (['git', '-C', directory, 'fetch', '--quiet', 'origin'] if os.path.isdir(os.path.join(directory, '.git'))
+           else ['git', 'clone', '--quiet', AUR_GIT.format(base), directory])
+    return [
+        ['mkdir', '-p', WORK],
+        get,
+        ['git', '-C', directory, 'checkout', '--quiet', '--force', commit],
+        ['git', '-C', directory, 'clean', '-fdxq'],
+        # Без -s: недостающие для сборки пакеты makepkg перечислит, ставить их через sudo из окна он не умеет.
+        ['makepkg', '-D', directory, '-f', '--cleanbuild', '--noconfirm'],
+        lambda: ['pkexec', 'pacman', '-U', '--noconfirm', *built_packages(directory, installed)],
+    ]

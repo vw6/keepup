@@ -608,18 +608,28 @@ class Window(Adw.ApplicationWindow):
             link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
             link.connect('activated', lambda *_: Gtk.UriLauncher(uri=page_url).launch(self, None, None))
             aur_group.add(link)
-            background(lambda: aur.pkgbuild_log(info.get('PackageBase') or name), show_log)
+            base = info.get('PackageBase') or name
+            background(lambda: aur.pkgbuild_log(base), lambda result: show_log(result, base))
 
-        def show_log(result):
+        def show_log(result, base):
             log_group.remove(log_wait)
             if isinstance(result, Exception) or not result:
                 log_group.add(row('История не загрузилась', str(result) if isinstance(result, Exception) else 'записей нет'))
                 return
-            for title_, date, note, href in result[:8]:
-                r = row(title_, f'{date}' + (f' · {note}' if note else ''), activatable=bool(href))
+            log_group.set_description('Правки сборочного сценария в AUR, сверху новые. Выберите правку, чтобы собрать и поставить '
+                                      'ту версию; кнопка справа открывает правку на сайте.')
+            for i, (title_, date, note, href) in enumerate(result[:15]):
+                commit = aur.commit_of(href)
+                r = row(title_, f'{date}' + (f' · {note}' if note else ''), activatable=bool(commit))
+                if i == 0:
+                    r.add_suffix(pill('новейшая', 'info'))
                 if href:
-                    r.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
-                    r.connect('activated', lambda _r, u=href.replace('http://', 'https://'): Gtk.UriLauncher(uri=u).launch(self, None, None))
+                    site = Gtk.Button(icon_name='adw-external-link-symbolic', valign=Gtk.Align.CENTER, tooltip_text='Открыть правку на сайте AUR')
+                    site.add_css_class('flat')
+                    site.connect('clicked', lambda _b, u=href.replace('http://', 'https://'): Gtk.UriLauncher(uri=u).launch(self, None, None))
+                    r.add_suffix(site)
+                if commit:
+                    r.connect('activated', lambda _r, c=commit, t=title_, d=date: self.confirm_aur_build(name, base, c, t, d))
                 log_group.add(r)
 
         background(lambda: aur.rpc_info([name]), show_rpc)
@@ -636,6 +646,20 @@ class Window(Adw.ApplicationWindow):
         if isinstance(parent, Adw.Dialog):
             parent.close()
         self.nav.pop_to_tag('root')
+
+    def confirm_aur_build(self, name, base, commit, title, date):
+        ask = Adw.AlertDialog(heading=f'Собрать {name} из правки от {date}?',
+                              body=f'«{title}»\n\nPKGBUILD этой правки скачается из AUR, пакет соберётся на этом компьютере и встанет '
+                                   'вместо нынешнего; установку подтвердите паролем. Старые версии иногда не собираются: файлы '
+                                   'программы могли пропасть с сайта автора. Кнопка «Обновить AUR» потом снова поставит новейшую.')
+        ask.add_response('cancel', 'Отмена')
+        ask.add_response('go', 'Собрать и поставить')
+        ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
+        ask.set_default_response('cancel')
+        installed = set(self.snap.packages)
+        ask.connect('response', lambda _d, resp: resp == 'go' and (self.nav.pop_to_tag('root'), self.run_op(
+            f'Сборка {name} ({date})', aur.build_commands(base, commit, installed))))
+        ask.present(self)
 
     def confirm_aur_one(self, parent, update):
         ask = Adw.AlertDialog(heading=f'Обновить {update.name}?',

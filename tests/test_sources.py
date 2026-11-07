@@ -120,3 +120,14 @@ class AurCard(unittest.TestCase):
         from updater import aur
         self.assertEqual(aur.remove_command('x'), ['pkexec', 'pacman', '-Rns', '--noconfirm', 'x'])
         self.assertEqual(aur.remove_command('x', deps=False)[2], '-Rn')
+
+
+class AurBuild(unittest.TestCase):
+    def test_commit_and_commands(self):
+        from updater import aur
+        self.assertEqual(aur.commit_of('http://aur.archlinux.org/cgit/aur.git/commit/?id=a3cd9ff99d3a&h=google-chrome'), 'a3cd9ff99d3a')
+        self.assertIsNone(aur.commit_of('https://aur.archlinux.org/packages/x'))
+        cmds = aur.build_commands('x-bin', 'abc123', {'x-bin'})
+        self.assertEqual(cmds[2][-1], 'abc123')
+        self.assertIn('makepkg', cmds[4])
+        self.assertTrue(callable(cmds[-1]))
