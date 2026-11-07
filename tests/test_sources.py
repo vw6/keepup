@@ -71,3 +71,23 @@ class Kernels(unittest.TestCase):
         self.assertEqual(new, ['linux-cachyos-lts', '*', '*lts', '*fallback', 'Snapshots'])
         self.assertEqual(kernels.default_kernel(new, ['linux-cachyos', 'linux-cachyos-lts']), 'linux-cachyos-lts')
         self.assertEqual(kernels.new_order(new, 'linux-cachyos'), ['linux-cachyos', '*', '*lts', '*fallback', 'Snapshots'])
+
+
+class AppStream(unittest.TestCase):
+    XML = ('<component><id>org.x.App</id><name>App</name><name xml:lang="ru">Прил</name><summary>Does</summary>'
+           '<description><p>One  two</p><p xml:lang="ru">Раз</p><ul><li>a</li><li xml:lang="ru">б</li></ul></description>'
+           '<icon type="cached" width="128" height="128">org.x.App.png</icon>'
+           '<screenshots><screenshot><caption>Main</caption><image type="thumbnail" width="624">https://a/624.png</image>'
+           '<image type="thumbnail" width="752">https://a/752.png</image></screenshot></screenshots>'
+           '<releases><release version="2.0" date="2026-11-06"><description><p>New</p></description></release></releases></component>')
+
+    def test_component(self):
+        import xml.etree.ElementTree as ET
+        from updater import appstream
+        info = appstream.parse_component(ET.fromstring(self.XML), 'ru')
+        self.assertEqual((info.name, info.summary), ('Прил', 'Does'))
+        self.assertEqual(info.description, 'Раз\n\n• б')
+        self.assertEqual(info.screenshots, [('Main', 'https://a/752.png')])
+        self.assertEqual((info.releases[0].version, info.releases[0].text), ('2.0', 'New'))
+        en = appstream.parse_component(ET.fromstring(self.XML), 'de')
+        self.assertEqual(en.description, 'One two\n\n• a')

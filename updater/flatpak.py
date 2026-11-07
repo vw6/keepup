@@ -96,6 +96,10 @@ def upgrade_command():
     return ['flatpak', 'update', '-y', '--noninteractive']
 
 
+def update_one_command(app):
+    return ['flatpak', 'update', '-y', '--noninteractive', f'--{app.installation}', f'{app.app_id}//{app.branch}']
+
+
 def checkout_command(app, commit):
     # Конкретную сборку в системную установку flatpak ставит только от root. Среды и переводы не трогаются:
     # меняется одно приложение.

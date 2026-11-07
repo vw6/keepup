@@ -7,9 +7,9 @@ import gi
 
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Adw, GLib, Gtk, Pango  # noqa: E402
+from gi.repository import Adw, Gdk, GLib, Gtk, Pango  # noqa: E402
 
-from . import aur, flatpak, kernels, news, ops, pacman  # noqa: E402
+from . import appstream, aur, flatpak, kernels, news, ops, pacman  # noqa: E402
 
 PAGES = [
     ('overview', 'Обзор', 'view-grid-symbolic'),
@@ -76,6 +76,7 @@ class Snapshot:
         self.flatpak_error = None
         self.repo_kernels = []
         self.boot_order = []
+        self.app_info = {}
 
     @classmethod
     def collect(cls):
@@ -102,6 +103,11 @@ class Snapshot:
             if flat:
                 s.flatpaks, s.flatpak_error = _result(flat)
         news.mark(s.news, [u.name for u in s.updates + s.aur_updates])
+        by_remote = defaultdict(list)
+        for app in s.flatpaks:
+            by_remote[(app.origin, app.installation)].append(app.app_id)
+        for (remote, installation), ids in by_remote.items():
+            s.app_info.update(appstream.lookup(remote, installation, ids))
         return s
 
 
@@ -513,21 +519,138 @@ class Window(Adw.ApplicationWindow):
             button.connect('clicked', lambda *_: self.run_op('Обновление Flatpak', flatpak.upgrade_command(), pacman_lock=False))
             upd.set_header_suffix(button)
             for a in new:
-                upd.add(row(a.name, f'{a.version or "?"}  →  {a.new_version}'))
+                upd.add(self.app_row(a, f'{a.version or "?"}  →  {a.new_version}'))
         else:
             upd.add(row('Обновлений нет', s.flatpak_error or 'все приложения свежие'))
         page.add(upd)
 
-        group = Adw.PreferencesGroup(title='Приложения', description='Выберите приложение, чтобы поставить одну из прошлых сборок.')
-        for a in sorted(s.flatpaks, key=lambda a: a.name.lower()):
-            r = row(a.name, f'{a.version or "без номера версии"} · {a.origin} · {a.installation}', activatable=True)
-            r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
-            r.connect('activated', lambda _r, app=a: self.ask_flatpak(app))
-            group.add(r)
+        group = Adw.PreferencesGroup(title='Приложения', description='Выберите приложение: описание, снимки, что нового, обновление и прошлые сборки.')
+        for a in sorted(s.flatpaks, key=lambda a: self.app_name(a).lower()):
+            group.add(self.app_row(a, f'{a.version or "без номера версии"} · {a.origin} · {a.installation}'))
         if not s.flatpaks:
             group.add(row('Приложений нет', s.flatpak_error or ''))
         page.add(group)
         return page
+
+    def app_name(self, app):
+        info = self.snap.app_info.get(app.app_id)
+        return info.name if info and info.name else app.name
+
+    def app_row(self, app, subtitle):
+        info = self.snap.app_info.get(app.app_id)
+        r = row(self.app_name(app), (info.summary + '\n' if info and info.summary else '') + subtitle, activatable=True)
+        r.add_prefix(_icon(info, 40))
+        if app.new_version:
+            r.add_suffix(pill('есть обновление', 'info'))
+        r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+        r.connect('activated', lambda _r: self.show_app(app))
+        return r
+
+    def show_app(self, app):
+        info = self.snap.app_info.get(app.app_id) or appstream.Info(app.app_id, name=app.name)
+        dialog = Adw.Dialog(title=info.name or app.name, content_width=760, content_height=720)
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        page = Adw.PreferencesPage()
+        view.set_content(page)
+        dialog.set_child(view)
+
+        head = Gtk.Box(spacing=18, margin_bottom=6)
+        head.append(_icon(info, 96))
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER, hexpand=True)
+        title = Gtk.Label(label=info.name or app.name, xalign=0, wrap=True)
+        title.add_css_class('title-1')
+        text.append(title)
+        if info.summary:
+            text.append(Gtk.Label(label=info.summary, xalign=0, wrap=True))
+        if info.developer:
+            dev = Gtk.Label(label=info.developer, xalign=0)
+            dev.add_css_class('dim-label')
+            text.append(dev)
+        head.append(text)
+        buttons = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER)
+        if app.new_version:
+            update = Gtk.Button(label=f'Обновить до {app.new_version}')
+            update.add_css_class('suggested-action')
+            update.add_css_class('pill')
+            update.connect('clicked', lambda *_: self.confirm_app_update(dialog, app))
+            buttons.append(update)
+        builds = Gtk.Button(label='Другая сборка…')
+        builds.add_css_class('pill')
+        builds.connect('clicked', lambda *_: self.ask_flatpak(app))
+        buttons.append(builds)
+        head.append(buttons)
+        top = Adw.PreferencesGroup()
+        top.add(head)
+        page.add(top)
+
+        if info.screenshots:
+            shots = Adw.PreferencesGroup()
+            carousel = Adw.Carousel(spacing=12, allow_scroll_wheel=False)
+            carousel.set_size_request(-1, 380)
+            for caption, url in info.screenshots[:8]:
+                frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, hexpand=True)
+                picture = Gtk.Picture(can_shrink=True, content_fit=Gtk.ContentFit.CONTAIN, vexpand=True)
+                frame.append(picture)
+                if caption:
+                    cap = Gtk.Label(label=caption, wrap=True)
+                    cap.add_css_class('dim-label')
+                    frame.append(cap)
+                carousel.append(frame)
+                background(lambda u=url: appstream.screenshot(u),
+                           lambda data, p=picture: not isinstance(data, Exception) and p.set_paintable(
+                               Gdk.Texture.new_from_bytes(GLib.Bytes.new(data))))
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            box.append(carousel)
+            box.append(Adw.CarouselIndicatorDots(carousel=carousel))
+            shots.add(box)
+            page.add(shots)
+
+        newer = [r for r in info.releases if app.version and flatpak_newer(r.version, app.version)]
+        notes = newer or info.releases[:1]
+        if notes:
+            whats = Adw.PreferencesGroup(title='Что нового' if newer else f'Версия {notes[0].version}')
+            for rel in notes[:5]:
+                exp = Adw.ExpanderRow(title=f'Версия {rel.version}', subtitle=_release_date(rel.date), expanded=rel is notes[0])
+                exp.set_use_markup(False)
+                body = Gtk.Label(label=rel.text or 'Описания изменений нет.', wrap=True, xalign=0, selectable=True,
+                                 margin_top=10, margin_bottom=10, margin_start=12, margin_end=12)
+                body.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+                exp.add_row(body)
+                whats.add(exp)
+            page.add(whats)
+
+        if info.description:
+            about = Adw.PreferencesGroup(title='Описание')
+            label = Gtk.Label(label=info.description, wrap=True, xalign=0, selectable=True)
+            label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+            about.add(label)
+            page.add(about)
+
+        details = Adw.PreferencesGroup(title='Подробно')
+        details.add(row('Установлена версия', app.version or 'без номера версии'))
+        details.add(row('Хранилище', f'{app.origin} · установка {app.installation} · ветка {app.branch}'))
+        if info.license:
+            details.add(row('Лицензия', info.license))
+        details.add(row('Идентификатор', app.app_id))
+        if info.homepage:
+            site = row('Сайт', info.homepage, activatable=True)
+            site.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
+            site.connect('activated', lambda *_: Gtk.UriLauncher(uri=info.homepage).launch(self, None, None))
+            details.add(site)
+        page.add(details)
+        dialog.present(self)
+
+    def confirm_app_update(self, parent, app):
+        ask = Adw.AlertDialog(heading=f'Обновить {self.app_name(app)}?',
+                              body=f'{app.version or "?"} → {app.new_version}. Нужные приложению среды обновятся вместе с ним.')
+        ask.add_response('cancel', 'Отмена')
+        ask.add_response('go', 'Обновить')
+        ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
+        ask.set_default_response('cancel')
+        ask.connect('response', lambda _d, resp: resp == 'go' and (parent.close(), self.run_op(
+            f'Обновление {self.app_name(app)}', flatpak.update_one_command(app), pacman_lock=False)))
+        ask.present(parent)
 
     def ask_flatpak(self, app):
         dialog = Adw.Dialog(title=app.name, content_width=560, content_height=520)
@@ -708,6 +831,27 @@ class Window(Adw.ApplicationWindow):
             self.toast('pacman сейчас занят другой программой, попробуйте позже')
             return
         OperationDialog(title, cmd, lambda code: code == 0 and self.refresh()).present(self)
+
+
+def _icon(info, size):
+    if info and info.icon:
+        image = Gtk.Image.new_from_file(info.icon)
+    else:
+        image = Gtk.Image(icon_name='application-x-executable-symbolic')
+    image.set_pixel_size(size)
+    image.set_valign(Gtk.Align.CENTER)
+    return image
+
+
+def flatpak_newer(a, b):
+    return pacman.vercmp(a, b) > 0
+
+
+def _release_date(value):
+    if value.isdigit():
+        from datetime import datetime
+        return datetime.fromtimestamp(int(value)).strftime('%d.%m.%Y')
+    return value
 
 
 def _note_group(title, subtitle):
