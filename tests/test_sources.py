@@ -1,6 +1,6 @@
 import unittest
 
-from keepup import flatpak, pacman
+from keepup import flatpak, pacman, search
 
 
 class Flatpak(unittest.TestCase):
@@ -257,3 +257,33 @@ class Progress(unittest.TestCase):
         a = progress.State()
         progress.feed(a, 'обновление amneziavpn-bin...')
         self.assertEqual((a.stage, a.detail), ('Установка', 'Обновление: amneziavpn-bin'))
+
+
+class FindNew(unittest.TestCase):
+    def test_pacman_ss(self):
+        text = ('cachyos-extra-znver4/obs-studio 33.0.1-1.1 [installed]\n    Free, open source software for live streaming\n'
+                'extra/obs-studio 33.0.1-1\n    Free, open source software for live streaming\n')
+        found = search.parse_ss(text)
+        self.assertEqual([(f.repo, f.name, f.version) for f in found],
+                         [('cachyos-extra-znver4', 'obs-studio', '33.0.1-1.1'), ('extra', 'obs-studio', '33.0.1-1')])
+        self.assertEqual(found[0].summary, 'Free, open source software for live streaming')
+
+    def test_rank(self):
+        names = ['obsidian', 'libobs', 'obs-studio', 'obs', 'something']
+        items = [search.Found('repo', n, title=n, summary='obs' if n == 'something' else '') for n in names]
+        self.assertEqual([f.name for f in sorted(items, key=lambda f: search.rank(f, 'obs'))],
+                         ['obs', 'obs-studio', 'obsidian', 'libobs', 'something'])
+
+    def test_flathub_all_words(self):
+        apps = [search.Found('flatpak', 'org.kde.kdenlive', 'Video editor', title='Kdenlive', data={'text': 'org.kde.kdenlive'}),
+                search.Found('flatpak', 'org.gimp.GIMP', 'Image editor', title='GIMP', data={'text': 'org.gimp.gimp'})]
+        self.assertEqual([a.name for a in search.flathub('video editor', apps)], ['org.kde.kdenlive'])
+
+    def test_install_commands(self):
+        cmd = search.repo_install_command(['https://m/x-1-1-x86_64.pkg.tar.zst'], ['libx'])
+        self.assertEqual(cmd[:2], ['pkexec', '/usr/bin/python3'])
+        self.assertTrue(cmd[2].endswith('helpers/install_packages.py'))
+        self.assertEqual(cmd[3:], ['--dep=libx', 'https://m/x-1-1-x86_64.pkg.tar.zst'])
+        self.assertIn('--needed', search.aur_install_command('x'))
+        item = search.Found('flatpak', 'org.gimp.GIMP', repo='flathub', data={'installation': 'system'})
+        self.assertEqual(search.flatpak_install_command(item)[-3:], ['--system', 'flathub', 'org.gimp.GIMP'])

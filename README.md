@@ -14,6 +14,8 @@
 
 На вкладке «Обзор» видно, сколько обновлений ждёт в репозиториях, AUR и Flatpak, нужна ли перезагрузка и какие новости Arch стоит прочитать до обновления. Новости Arch показываются с пометкой, если касаются ваших пакетов, переводятся на русский через translate-shell (команды, версии и имена пакетов не переводятся) и сохраняются локально вместе с переводом.
 
+Вкладка «Установить» ищет то, чего ещё нет в системе, сразу в трёх местах: в репозиториях, на Flathub и в AUR. Пакет открывается такой же карточкой, с описанием, размером, зависимостями, а у приложений Flathub и снимками экрана. Пакет из репозитория ставится ровно той версии, что в свежих списках, вместе с нужными ему пакетами; если для него нужны более новые общие библиотеки, программа предложит поставить его вместе с обновлением всей системы. Пакеты AUR собирает paru, и перед сборкой можно открыть PKGBUILD.
+
 У каждого пакета, из репозиториев или из AUR, и у каждого приложения Flatpak есть своя страница: описание, снимки экрана, история версий и примечания к выпуску из самой программы, выпусков GitHub или каталога Flathub. Отсюда можно обновить один пакет, если это не тянет обновление общих библиотек, поставить любую прошлую версию из кэша pacman, архива Arch или правки PKGBUILD в AUR, удалить пакет. Пакеты одной сборки (например, все части mesa) ставятся и откатываются только вместе.
 
 Вкладка «Ядра» показывает установленные и доступные ядра, ставит ядро вместе с заголовками и модулями ваших устройств, подсказывает, если у запасного ядра не хватает модуля, и выбирает основное ядро в загрузчике Limine. Вкладка «История» раскладывает журнал pacman по дням.
@@ -46,7 +48,7 @@ make install DESTDIR=/ PREFIX=/usr
 
 ## English
 
-KeepUp is a GNOME-style update manager for Arch Linux and CachyOS: pending updates from the repositories, AUR and Flatpak, Arch news with optional machine translation and an offline archive, a page for every package with release notes, rollback to any previous version (pacman cache, Arch Linux Archive or an AUR commit), kernel management with Limine, and pacman history by day.
+KeepUp is a GNOME-style update manager for Arch Linux and CachyOS: search and install from the repositories, Flathub and AUR, pending updates from the repositories, AUR and Flatpak, Arch news with optional machine translation and an offline archive, a page for every package with release notes, rollback to any previous version (pacman cache, Arch Linux Archive or an AUR commit), kernel management with Limine, and pacman history by day.
 
 This is primarily a personal project, published as is. Further development, fixes and support are not guaranteed. It was written in about an hour together with Claude Opus 5.5 (Anthropic) as a Python prototype that may later be rewritten in Rust.
 

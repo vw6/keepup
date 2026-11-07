@@ -315,9 +315,9 @@ def reboot_reasons(log, boot):
     return list(seen.values())
 
 
-def repo_info(name):
+def repo_info(name, dbpath=None):
     """Сведения о пакете в репозитории (pacman -Si), из первого по приоритету репозитория."""
-    out = subprocess.run(['pacman', '-Si', name], capture_output=True, stdin=subprocess.DEVNULL, text=True,
+    out = subprocess.run(['pacman', '-Si', *(['--dbpath', dbpath] if dbpath else []), name], capture_output=True, stdin=subprocess.DEVNULL, text=True,
                          env={**os.environ, 'LC_ALL': 'C'})
     first = out.stdout.split('\n\n', 1)[0]
     fields, key = {}, None

@@ -1,7 +1,8 @@
-"""Главное окно: боковые вкладки «Обзор», «Новости», «Пакеты», «AUR», «Flatpak», «Ядра», «История»."""
+"""Главное окно: боковые вкладки «Обзор», «Установить», «Новости», «Пакеты», «AUR», «Flatpak», «Ядра», «История»."""
 import os
 import threading
 from collections import defaultdict
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
 import gi
@@ -10,10 +11,11 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Adw, Gdk, GLib, GObject, Gtk, Pango  # noqa: E402
 
-from . import NAME, appstream, archive, aur, flatpak, kernels, news, notes, ops, pacman, progress, translate  # noqa: E402
+from . import NAME, appstream, archive, aur, flatpak, kernels, news, notes, ops, pacman, progress, search, translate  # noqa: E402
 
 PAGES = [
     ('overview', 'Обзор', 'view-grid-symbolic'),
+    ('install', 'Установить', 'list-add-symbolic'),
     ('news', 'Новости Arch', 'x-office-document-symbolic'),
     ('packages', 'Пакеты', 'system-software-install-symbolic'),
     ('aur', 'AUR', 'application-x-addon-symbolic'),
@@ -394,6 +396,7 @@ class Window(Adw.ApplicationWindow):
             self.holders[key] = holder
             self.stack.add_named(holder, key)
         self.stack.add_named(self.downloads, 'downloads')
+        self.holders['install'].set_child(self.build_install())
         content.set_content(self.stack)
         # Карточка приложения или пакета открывается как страница поверх вкладки, со стрелкой «назад» в заголовке.
         self.nav = Adw.NavigationView(vexpand=True)
@@ -501,7 +504,20 @@ class Window(Adw.ApplicationWindow):
         if hasattr(self, 'nav'):
             self.nav.pop_to_tag('root')
         title = dict((k, t) for k, t, _ in PAGES)[r.page_key]
+        was_install = self.stack.get_visible_child_name() == 'install'
         self.stack.set_visible_child_name(r.page_key)
+        if hasattr(self, 'search_entry'):
+            # На «Установить» строка поиска ищет то, чего ещё нет в системе; на других вкладках она фильтрует их.
+            if r.page_key == 'install':
+                self.search_entry.set_placeholder_text('Программа или пакет')
+                self.search_entry.set_text(self.find_query)
+                self.search_bar.set_search_mode(True)
+                self.search_entry.grab_focus()
+                background(search.catalog, lambda _r: None)
+            else:
+                self.search_entry.set_placeholder_text('Найти на вкладке')
+                if was_install:
+                    self.search_entry.set_text('')
         GLib.idle_add(self.apply_filter)
         self.content_title.set_title(title)
         self.content_page.set_title(title)
@@ -510,8 +526,9 @@ class Window(Adw.ApplicationWindow):
     # Данные
 
     def show_loading(self):
-        for holder in self.holders.values():
-            holder.set_child(Adw.StatusPage(title='Проверяем систему…', child=Adw.Spinner()))
+        for key, holder in self.holders.items():
+            if key != 'install':
+                holder.set_child(Adw.StatusPage(title='Проверяем систему…', child=Adw.Spinner()))
 
     def refresh(self):
         self.refresh_button.set_sensitive(False)
@@ -523,6 +540,8 @@ class Window(Adw.ApplicationWindow):
             self.toast(f'Проверка не удалась: {result}')
             return
         self.snap = result
+        if self.find_query:
+            self.find(self.find_query, delay=0)
         for key, build in (('overview', self.build_overview), ('news', self.build_news), ('packages', self.build_packages),
                            ('aur', self.build_aur), ('flatpak', self.build_flatpak),
                            ('kernels', self.build_kernels), ('history', self.build_history)):
@@ -530,6 +549,9 @@ class Window(Adw.ApplicationWindow):
         self.apply_filter()
 
     def on_search(self, entry):
+        if self.stack.get_visible_child_name() == 'install':
+            self.find(entry.get_text().strip())
+            return
         self.query = entry.get_text().strip().lower()
         # На «Пакетах» поиск идёт и по всем установленным, а не только по показанным строкам.
         if self.stack.get_visible_child_name() == 'packages' and hasattr(self, 'rollback_group'):
@@ -538,7 +560,8 @@ class Window(Adw.ApplicationWindow):
         self.apply_filter()
 
     def apply_filter(self):
-        holder = self.holders.get(self.stack.get_visible_child_name())
+        key = self.stack.get_visible_child_name()
+        holder = self.holders.get(key) if key != 'install' else None
         page = holder.get_child() if holder else None
         if page is not None:
             _filter_widget(page, self.query)
@@ -618,6 +641,290 @@ class Window(Adw.ApplicationWindow):
         for i, (k, _t, _i) in enumerate(PAGES):
             if k == key:
                 self.sidebar_list.select_row(self.sidebar_list.get_row_at_index(i))
+
+    # Поиск и установка нового: репозитории, AUR и Flathub; установленное открывается своей обычной карточкой.
+
+    FIND_SOURCES = (('repo', 'Репозитории'), ('flatpak', 'Flathub'), ('aur', 'AUR'))
+    FIND_ROWS = 8
+
+    def build_install(self):
+        self.find_query = ''
+        self.find_gen = 0
+        self.find_timer = 0
+        self.find_found = {}
+        self.find_stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
+        self.find_stack.add_named(Adw.StatusPage(icon_name='system-search-symbolic', title='Что поставить?',
+                                                 description='Начните печатать: поиск идёт сразу по репозиториям, Flathub и AUR.'),
+                                  'hint')
+        page = WidePage()
+        self.find_bins = {}
+        for key, _title in self.FIND_SOURCES:
+            self.find_bins[key] = Adw.Bin()
+            page.add(self.find_bins[key])
+        self.find_stack.add_named(page, 'results')
+        return self.find_stack
+
+    def find(self, query, delay=250):
+        """Поиск с небольшой паузой после ввода; ответ на устаревший запрос отбрасывается."""
+        self.find_query = query
+        if self.find_timer:
+            GLib.source_remove(self.find_timer)
+            self.find_timer = 0
+        if len(query) < 2:
+            self.find_gen += 1
+            self.find_stack.set_visible_child_name('hint')
+            return
+
+        def go():
+            self.find_timer = 0
+            self.find_gen += 1
+            gen = self.find_gen
+            self.find_stack.set_visible_child_name('results')
+            works = {'repo': lambda: search.repo(query),
+                     'flatpak': lambda: search.flathub(query, search.catalog()) if flatpak.available() else [],
+                     'aur': lambda: search.aur(query, skip={f.name for f in search.repo(query)})}
+            for key, _title in self.FIND_SOURCES:
+                self.show_found(key, self.find_found.get(key), loading=True)
+                background(works[key], lambda res, k=key: gen == self.find_gen and self.show_found(k, res))
+            return False
+        if delay:
+            self.find_timer = GLib.timeout_add(delay, go)
+        else:
+            go()
+
+    def show_found(self, key, items, loading=False, limit=None):
+        title = dict(self.FIND_SOURCES)[key]
+        group = Adw.PreferencesGroup(title=title)
+        if loading:
+            group.set_header_suffix(Adw.Spinner())
+        if isinstance(items, Exception):
+            group.add(row('Не удалось найти', str(items)))
+        elif items is None:
+            group.add(row('Ищем…'))
+        elif not items:
+            group.add(row('Ничего не найдено'))
+        else:
+            if not loading:
+                self.find_found[key] = items
+                group.set_description(f'найдено: {len(items)}')
+            limit = limit or self.FIND_ROWS
+            for item in items[:limit]:
+                group.add(self.found_row(item))
+            if len(items) > limit:
+                more = row(f'Показать ещё {min(len(items) - limit, 40)}', activatable=True)
+                more.add_suffix(Gtk.Image(icon_name='go-down-symbolic'))
+                more.connect('activated', lambda *_: self.show_found(key, items, limit=limit + 40))
+                group.add(more)
+        self.find_bins[key].set_child(group)
+
+    def found_installed(self, item):
+        if item.source == 'repo':
+            return item.name in self.snap.packages
+        if item.source == 'aur':
+            return item.name in self.snap.foreign
+        return next((a for a in self.snap.flatpaks if a.app_id == item.name), None)
+
+    def found_icon(self, item, size):
+        if item.source == 'flatpak':
+            big = item.icon.replace('/64x64/', '/128x128/') if size > 64 else ''
+            return _pkg_icon((big if big and os.path.exists(big) else item.icon) or 'application-x-executable-symbolic', size)
+        return _pkg_icon(self.snap.icons.get(item.name) or pacman.kind_icon(item.name), size)
+
+    def found_where(self, item):
+        if item.source == 'repo':
+            return f'{item.repo} · {item.version}'
+        if item.source == 'aur':
+            d = item.data
+            return 'AUR · ' + ' · '.join(x for x in (item.version, f'голосов {d.get("NumVotes", 0)}',
+                                                     'помечен устаревшим' if d.get('OutOfDate') else '',
+                                                     'без сопровождающего' if not d.get('Maintainer') else '') if x)
+        return f'Flathub · {item.name}'
+
+    def found_row(self, item):
+        r = row(item.title or item.name, ((item.summary + '\n') if item.summary else '') + self.found_where(item), activatable=True)
+        r.add_prefix(self.found_icon(item, 40 if item.source == 'flatpak' else 32))
+        installed = self.found_installed(item)
+        if installed:
+            r.add_suffix(pill('установлен', 'ok'))
+        r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+        r.connect('activated', lambda _r: self.open_found(item))
+        return r
+
+    def open_found(self, item):
+        installed = self.found_installed(item)
+        if not installed:
+            self.show_new(item)
+        elif item.source == 'repo':
+            self.show_pkg(item.name)
+        elif item.source == 'aur':
+            self.show_aur(item.name)
+        else:
+            self.show_app(installed)
+
+    def show_new(self, item):
+        """Карточка того, что ещё не стоит: сразу шапка и кнопка, подробности дописываются, когда придут."""
+        page = WidePage()
+        dialog = self.detail_page(item.title or item.name, page)
+        head = Gtk.Box(spacing=18, margin_bottom=6)
+        head.append(self.found_icon(item, 96))
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER, hexpand=True)
+        title = Gtk.Label(label=item.title or item.name, xalign=0, wrap=True)
+        title.add_css_class('title-1')
+        text.append(title)
+        if item.summary:
+            text.append(Gtk.Label(label=item.summary, xalign=0, wrap=True))
+        where = Gtk.Label(label=self.found_where(item), xalign=0, wrap=True)
+        where.add_css_class('dim-label')
+        text.append(where)
+        head.append(text)
+        buttons = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER)
+        install = Gtk.Button(label='Установить')
+        install.add_css_class('suggested-action')
+        install.add_css_class('pill')
+        install.connect('clicked', lambda *_: self.ask_new_install(item))
+        buttons.append(install)
+        head.append(buttons)
+        self.set_anchor(dialog, buttons)
+        top = Adw.PreferencesGroup()
+        top.add(head)
+        page.add(top)
+        wait = Adw.Spinner(height_request=32, margin_top=12)
+        page.add(wait)
+        background(lambda: self.new_details(item), lambda res: (page.box.remove(wait), self.fill_new(page, item, res)))
+        self.push_page(dialog)
+
+    def new_details(self, item):
+        if item.source == 'repo':
+            return pacman.repo_info(item.name, dbpath=search.repo_db())
+        if item.source == 'aur':
+            return aur.rpc_info([item.name]).get(item.name, item.data)
+        return appstream.lookup(item.repo, item.data.get('installation', 'system'), [item.name]).get(item.name)
+
+    def fill_new(self, page, item, info):
+        if isinstance(info, Exception) or not info:
+            page.add(_note_group('Подробностей нет', str(info) if isinstance(info, Exception) else ''))
+            return
+        details = Adw.PreferencesGroup(title='Подробно')
+
+        def add(title, value):
+            if value and value != 'None':
+                details.add(row(title, value.replace('\n', ' ') if title != 'Описание' else value))
+
+        def link(title, url):
+            if url and url != 'None':
+                r = row(title, url, activatable=True)
+                r.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
+                r.connect('activated', lambda *_: Gtk.UriLauncher(uri=url).launch(self, None, None))
+                details.add(r)
+        if item.source == 'repo':
+            add('Версия', info.get('Version'))
+            add('Репозиторий', info.get('Repository'))
+            add('Скачать', info.get('Download Size'))
+            add('Займёт на диске', info.get('Installed Size'))
+            add('Зависит от', '  '.join(info.get('Depends On', '').split()))
+            add('Лицензия', info.get('Licenses'))
+            link('Сайт', info.get('URL'))
+        elif item.source == 'aur':
+            if info.get('OutOfDate') or not info.get('Maintainer'):
+                page.add(_note_group('Стоит присмотреться', ' '.join(x for x in (
+                    'Пакет помечен устаревшим: сборка может не пройти.' if info.get('OutOfDate') else '',
+                    'У пакета нет сопровождающего: его никто не обновляет.' if not info.get('Maintainer') else '') if x)))
+            add('Версия', info.get('Version'))
+            add('Сопровождающий', info.get('Maintainer') or 'нет')
+            add('Голосов', f'{info.get("NumVotes", 0)}, популярность {info.get("Popularity", 0):.2f}')
+            if info.get('LastModified'):
+                add('Обновлён', _long_date(datetime.fromtimestamp(info['LastModified']).date()))
+            add('Зависит от', '  '.join(info.get('Depends', [])))
+            add('Для сборки нужно', '  '.join(info.get('MakeDepends', [])))
+            add('Лицензия', ', '.join(info.get('License', [])))
+            link('Сайт', info.get('URL'))
+            link('PKGBUILD', f'https://aur.archlinux.org/cgit/aur.git/tree/PKGBUILD?h={info.get("PackageBase", item.name)}')
+        else:
+            if info.screenshots:
+                page.add(_screenshots(info.screenshots))
+            if info.description:
+                about = Adw.PreferencesGroup(title='Описание')
+                label = Gtk.Label(label=info.description, wrap=True, xalign=0, selectable=True)
+                label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+                about.add(label)
+                page.add(about)
+            if info.releases:
+                add('Версия', info.releases[0].version)
+            add('Разработчик', info.developer)
+            add('Лицензия', info.license)
+            add('Идентификатор', item.name)
+            link('Сайт', info.homepage)
+        page.add(details)
+
+    def ask_new_install(self, item):
+        name = item.title or item.name
+        if item.source == 'repo':
+            def show(result):
+                if isinstance(result, Exception):
+                    self.toast(f'Не удалось рассчитать установку: {result}')
+                    return
+                targets, others, new = result
+                if others:
+                    ask = Adw.AlertDialog(heading='Сначала обновить систему',
+                                          body=f'{name} нужны более новые общие пакеты: '
+                                               + ', '.join(f'{t.name} {t.version}' for t in others[:8])
+                                               + '. Отдельно их не обновить, поэтому установка пойдёт вместе с обновлением всей системы.')
+                    ask.add_response('cancel', 'Отмена')
+                    ask.add_response('go', 'Обновить и установить')
+                    ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
+                    ask.set_default_response('cancel')
+                    ask.connect('response', lambda _d, resp: resp == 'go' and self.run_op(
+                        f'Установка {name}', kernels.install_command([item.name])))
+                    ask.present(self)
+                    return
+                deps = [t for t in new if t.name != item.name]
+                body = f'Поставится {item.name} {item.version}'
+                if deps:
+                    body += ' и нужные ему пакеты: ' + ', '.join(t.name for t in deps[:12]) + (' и другие' if len(deps) > 12 else '')
+                body += '. Общие пакеты системы не меняются.'
+                ask = Adw.AlertDialog(heading=f'Установить {name}?', body=body)
+                ask.add_response('cancel', 'Отмена')
+                ask.add_response('go', 'Установить')
+                ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
+                ask.set_default_response('cancel')
+                urls = [t.url for t in new]
+                ask.connect('response', lambda _d, resp: resp == 'go' and self.run_op(
+                    f'Установка {name}', search.repo_install_command(urls, [t.name for t in deps])))
+                ask.present(self)
+            background(lambda: pacman.single_update_plan([item.name], self.snap.packages, dbpath=search.repo_db()), show)
+            return
+        if item.source == 'aur':
+            if not aur.available():
+                self.toast('Для пакетов AUR нужен paru')
+                return
+            ask = Adw.AlertDialog(heading=f'Собрать и установить {name}?',
+                                  body='Пакеты AUR выкладывают сами пользователи, Arch их не проверяет. Если сомневаетесь, '
+                                       'сначала откройте PKGBUILD: там видно, что и откуда будет скачано. Сборка идёт на этом '
+                                       'компьютере и может занять время.')
+            ask.add_response('cancel', 'Отмена')
+            ask.add_response('pkgbuild', 'Открыть PKGBUILD')
+            ask.add_response('go', 'Собрать и установить')
+            ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
+            ask.set_default_response('cancel')
+            base = item.data.get('PackageBase', item.name)
+
+            def answer(_d, resp):
+                if resp == 'pkgbuild':
+                    Gtk.UriLauncher(uri=f'https://aur.archlinux.org/cgit/aur.git/tree/PKGBUILD?h={base}').launch(self, None, None)
+                elif resp == 'go':
+                    self.run_op(f'Установка {name}', search.aur_install_command(item.name))
+            ask.connect('response', answer)
+            ask.present(self)
+            return
+        ask = Adw.AlertDialog(heading=f'Установить {name}?',
+                              body=f'Приложение поставится из {"Flathub" if item.repo == "flathub" else item.repo}; нужные ему среды скачаются вместе с ним.')
+        ask.add_response('cancel', 'Отмена')
+        ask.add_response('go', 'Установить')
+        ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
+        ask.set_default_response('cancel')
+        ask.connect('response', lambda _d, resp: resp == 'go' and self.run_op(
+            f'Установка {name}', search.flatpak_install_command(item), pacman_lock=False))
+        ask.present(self)
 
     # Новости
 
@@ -1016,7 +1323,6 @@ class Window(Adw.ApplicationWindow):
             aur_group.add(row('Сопровождающий', info.get('Maintainer') or 'нет: пакет брошен, его может подхватить кто угодно'))
             aur_group.add(row('Голоса и популярность', f'{info.get("NumVotes", 0)} голосов · популярность {info.get("Popularity", 0):.2f}'))
             if info.get('LastModified'):
-                from datetime import datetime
                 aur_group.add(row('Последнее изменение', datetime.fromtimestamp(info['LastModified']).strftime('%d.%m.%Y')))
             page_url = f'https://aur.archlinux.org/packages/{info.get("Name", name)}'
             link = row('Страница в AUR', page_url, activatable=True)
