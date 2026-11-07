@@ -8,7 +8,7 @@ import gi
 
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Adw, Gdk, GLib, Gtk, Pango  # noqa: E402
+from gi.repository import Adw, Gdk, GLib, GObject, Gtk, Pango  # noqa: E402
 
 from . import appstream, archive, aur, flatpak, kernels, news, notes, ops, pacman  # noqa: E402
 
@@ -49,8 +49,20 @@ def row(title, subtitle='', activatable=False):
     return r
 
 
+class Expander(Adw.ExpanderRow):
+    """Раскрывающаяся строка, которая помнит свои вложенные строки: внутри у Adw.ExpanderRow есть и служебная строка
+    заголовка, и обход дерева виджетов спутал бы её с нашими."""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.rows = []
+
+    def add_row(self, child):
+        self.rows.append(child)
+        super().add_row(child)
+
+
 def expander(title, subtitle='', expanded=False):
-    r = Adw.ExpanderRow(use_markup=False, expanded=expanded)
+    r = Expander(use_markup=False, expanded=expanded)
     r.set_title(title)
     r.set_subtitle(subtitle)
     return r
@@ -186,7 +198,23 @@ class Window(Adw.ApplicationWindow):
         self.refresh_button = Gtk.Button(icon_name='view-refresh-symbolic', tooltip_text='Проверить заново')
         self.refresh_button.connect('clicked', lambda *_: self.refresh())
         header.pack_end(self.refresh_button)
+        self.search_button = Gtk.ToggleButton(icon_name='system-search-symbolic', tooltip_text='Поиск (Ctrl+F)')
+        header.pack_end(self.search_button)
         content.add_top_bar(header)
+        # Поиск фильтрует открытую вкладку; начать печатать можно сразу, строка откроется сама.
+        self.query = ''
+        self.search_entry = Gtk.SearchEntry(placeholder_text='Найти на вкладке', hexpand=True)
+        self.search_entry.connect('search-changed', self.on_search)
+        self.search_bar = Gtk.SearchBar(child=Adw.Clamp(maximum_size=600, child=self.search_entry), show_close_button=True)
+        self.search_bar.connect_entry(self.search_entry)
+        self.search_bar.set_key_capture_widget(self)
+        self.search_bar.bind_property('search-mode-enabled', self.search_button, 'active',
+                                      GObject.BindingFlags.BIDIRECTIONAL | GObject.BindingFlags.SYNC_CREATE)
+        content.add_top_bar(self.search_bar)
+        shortcut = Gtk.ShortcutController(scope=Gtk.ShortcutScope.GLOBAL)
+        shortcut.add_shortcut(Gtk.Shortcut(trigger=Gtk.ShortcutTrigger.parse_string('<Control>f'),
+                                           action=Gtk.CallbackAction.new(lambda *_: self.search_bar.set_search_mode(True) or True)))
+        self.add_controller(shortcut)
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
         self.holders = {}
         for key, _title, _icon in PAGES:
@@ -237,6 +265,7 @@ class Window(Adw.ApplicationWindow):
             self.nav.pop_to_tag('root')
         title = dict((k, t) for k, t, _ in PAGES)[r.page_key]
         self.stack.set_visible_child_name(r.page_key)
+        GLib.idle_add(self.apply_filter)
         self.content_title.set_title(title)
         self.content_page.set_title(title)
         self.split.set_show_content(True)
@@ -261,6 +290,22 @@ class Window(Adw.ApplicationWindow):
                            ('aur', self.build_aur), ('flatpak', self.build_flatpak),
                            ('kernels', self.build_kernels), ('history', self.build_history)):
             self.holders[key].set_child(build())
+        self.apply_filter()
+
+    def on_search(self, entry):
+        self.query = entry.get_text().strip().lower()
+        # На «Пакетах» поиск идёт и по всем установленным, а не только по показанным строкам.
+        if self.stack.get_visible_child_name() == 'packages' and hasattr(self, 'rollback_group'):
+            self.rollback_query = self.query
+            self.fill_rollback()
+        self.apply_filter()
+
+    def apply_filter(self):
+        holder = self.holders.get(self.stack.get_visible_child_name())
+        page = holder.get_child() if holder else None
+        if page is not None:
+            _filter_widget(page, self.query)
+        return False
 
     def toast(self, text):
         toast = Adw.Toast(timeout=5, use_markup=False)
@@ -388,12 +433,8 @@ class Window(Adw.ApplicationWindow):
         page.add(upd)
 
         self.rollback_group = Adw.PreferencesGroup(
-            title='Установленные пакеты', description='Найдите пакет: описание, история версий и сборки, другая версия из кэша '
-                                                      'или архива Arch, удаление.')
-        search = Gtk.SearchEntry(placeholder_text='Найти пакет', valign=Gtk.Align.CENTER)
-        search.set_text(self.rollback_query)
-        search.connect('search-changed', self.on_rollback_search)
-        self.rollback_group.set_header_suffix(search)
+            title='Установленные пакеты', description='Через поиск (Ctrl+F или просто начните печатать) находится любой установленный '
+                                                      'пакет: описание, версии, история сборки, другая версия, удаление.')
         self.rollback_rows = []
         self.fill_rollback()
         page.add(self.rollback_group)
@@ -1477,6 +1518,50 @@ class _VerKey:
 
 def pacman_files(name):
     return aur.files_of([name]).get(name, [])
+
+
+def _row_text(r):
+    return ((r.get_title() or '') + ' ' + (r.get_subtitle() or '')).lower()
+
+
+def _children(widget):
+    child = widget.get_first_child()
+    while child is not None:
+        yield child
+        child = child.get_next_sibling()
+
+
+def _filter_widget(widget, query):
+    """Прячет строки, где нет запроса, и группы, где не осталось строк. Возвращает, осталась ли видимой хоть одна строка."""
+    if isinstance(widget, Adw.ExpanderRow):
+        inner = [c for c in getattr(widget, 'rows', []) if isinstance(c, Adw.PreferencesRow)]
+        own = not query or query in _row_text(widget)
+        hit_inner = bool(query) and any(query in _row_text(c) for c in inner)
+        for c in inner:
+            c.set_visible(own or not query or query in _row_text(c))
+        widget.set_visible(own or hit_inner)
+        if hit_inner and not own:
+            widget.set_expanded(True)
+        return widget.get_visible()
+    if isinstance(widget, Adw.ActionRow):
+        widget.set_visible(not query or query in _row_text(widget))
+        return widget.get_visible()
+    any_row = False
+    has_rows = False
+    for child in _children(widget):
+        rows_inside = _has_rows(child)
+        has_rows = has_rows or rows_inside
+        if rows_inside:
+            any_row = _filter_widget(child, query) or any_row
+    if isinstance(widget, Adw.PreferencesGroup) and has_rows:
+        widget.set_visible(any_row or not query)
+    return any_row
+
+
+def _has_rows(widget):
+    if isinstance(widget, (Adw.ActionRow, Adw.ExpanderRow)):
+        return True
+    return any(_has_rows(c) for c in _children(widget))
 
 
 class WidePage(Gtk.ScrolledWindow):

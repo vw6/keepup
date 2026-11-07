@@ -167,3 +167,39 @@ class SingleUpdate(unittest.TestCase):
     def test_command(self):
         self.assertEqual(pacman.install_urls_command(['https://m/x.pkg.tar.zst']),
                          ['pkexec', 'pacman', '-U', '--noconfirm', 'https://m/x.pkg.tar.zst'])
+
+
+class Search(unittest.TestCase):
+    def test_filter_rows_groups_and_expanders(self):
+        import os
+        import gi
+        gi.require_version('Gtk', '4.0')
+        gi.require_version('Adw', '1')
+        from gi.repository import Adw, Gtk
+        if not Gtk.init_check():
+            self.skipTest('нет дисплея')
+        from updater.window import WidePage, _filter_widget, expander, row
+        page = WidePage()
+        updates = Adw.PreferencesGroup(title='Обновления')
+        tg, mesa = row('telegram-desktop', '7.3.3 → 7.4.1'), row('mesa', '26.2.5 → 26.2.6')
+        updates.add(tg)
+        updates.add(mesa)
+        history = Adw.PreferencesGroup(title='История')
+        day = expander('08.11.2026', 'обновлён: 2')
+        inner_tg, inner_x = row('telegram-desktop', 'обновлён'), row('nano', 'обновлён')
+        day.add_row(inner_tg)
+        day.add_row(inner_x)
+        history.add(day)
+        other = Adw.PreferencesGroup(title='Прочее')
+        other.add(row('linux-cachyos', ''))
+        for g in (updates, history, other):
+            page.add(g)
+        _filter_widget(page, 'telegram')
+        self.assertTrue(tg.get_visible())
+        self.assertFalse(mesa.get_visible())
+        self.assertTrue(day.get_visible() and day.get_expanded())
+        self.assertTrue(inner_tg.get_visible())
+        self.assertFalse(inner_x.get_visible())
+        self.assertFalse(other.get_visible())
+        _filter_widget(page, '')
+        self.assertTrue(mesa.get_visible() and other.get_visible() and inner_x.get_visible())
