@@ -1168,6 +1168,10 @@ class Window(Adw.ApplicationWindow):
         wait = row('Загружаем архив версий…')
         versions_group.add(wait)
         page.add(versions_group)
+        aur_group = Adw.PreferencesGroup(title='История в AUR', visible=False,
+                                         description='Репозиторий собрал этот пакет из AUR. Выберите правку: что изменилось в той версии '
+                                                     'и собрать её; собранная встанет вместо пакета из репозитория.')
+        page.add(aur_group)
         history_group = Adw.PreferencesGroup(title='История сборки в Arch', description='Правки сборочного сценария пакета на GitLab Arch.')
         history_wait = row('Загружаем историю…')
         history_group.add(history_wait)
@@ -1220,14 +1224,14 @@ class Window(Adw.ApplicationWindow):
                 only_repo = not (where.get('cache') or where.get('archive') or where.get('installed'))
                 if only_repo:
                     tags.append('ставится обновлением системы')
-                r = row(f'Версия {v}', ' · '.join(tags), activatable=not where.get('installed') and not only_repo)
+                r = row(f'Версия {v}', ' · '.join(tags), activatable=not where.get('installed'))
                 if where.get('installed'):
                     r.add_suffix(pill('установлена', 'ok'))
                 elif where.get('repo'):
                     r.add_suffix(pill('новейшая', 'info'))
-                if not where.get('installed') and not only_repo:
+                if not where.get('installed'):
                     r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
-                    r.connect('activated', lambda _r, ver=v: self.show_pkg_version(name, ver, local.get('URL', ''), files))
+                    r.connect('activated', lambda _r, ver=v, upd=only_repo: self.show_pkg_version(name, ver, local.get('URL', ''), files, from_repo=upd))
                 versions_group.add(r)
             if not archived:
                 versions_group.set_description(versions_group.get_description() + ' В архиве Arch этого пакета нет: '
@@ -1245,10 +1249,36 @@ class Window(Adw.ApplicationWindow):
                     r.connect('activated', lambda _r, u=href: Gtk.UriLauncher(uri=u).launch(self, None, None))
                 history_group.add(r)
 
+        def show_aur(result):
+            if isinstance(result, Exception) or not result:
+                return
+            base, log = result
+            entries = log[:16]
+            for i, (title_, date, note_, href) in enumerate(entries[:15]):
+                commit = aur.commit_of(href)
+                prev = aur.commit_of(entries[i + 1][3]) if i + 1 < len(entries) else None
+                r = row(title_, date + (f' · {note_}' if note_ else ''), activatable=bool(commit))
+                if commit:
+                    r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+                    r.connect('activated', lambda _r, c=commit, p=prev, t=title_, d=date: self.confirm_aur_build(name, base, c, p, t, d))
+                aur_group.add(r)
+            aur_group.set_visible(True)
+
+        def aur_history():
+            # Только для пакетов без архива Arch: сборки CachyOS из AUR (claude-desktop и подобные).
+            if archive.versions(name):
+                return None
+            info = aur.rpc_info([name]).get(name)
+            if not info:
+                return None
+            base = info.get('PackageBase') or name
+            return base, aur.pkgbuild_log(base)
+
         background(lambda: archive.versions(name), show_versions)
         background(lambda: archive.packaging_log(pkg.base), show_history)
+        background(aur_history, show_aur)
 
-    def show_pkg_version(self, name, version, url, files):
+    def show_pkg_version(self, name, version, url, files, from_repo=False):
         """Страница версии пакета из репозитория: примечания к выпуску и что поставится вместе с ним."""
         s = self.snap
         pkg = s.packages[name]
@@ -1266,7 +1296,9 @@ class Window(Adw.ApplicationWindow):
         sub.add_css_class('dim-label')
         text.append(sub)
         head.append(text)
-        go = Gtk.Button(label='Поставить эту версию', valign=Gtk.Align.CENTER, sensitive=False)
+        go = Gtk.Button(label='Обновить до этой' if from_repo else 'Поставить эту версию', valign=Gtk.Align.CENTER, sensitive=from_repo)
+        if from_repo:
+            go.connect('clicked', lambda *_: self.ask_single_update(name))
         go.add_css_class('suggested-action')
         go.add_css_class('pill')
         head.append(go)
@@ -1346,7 +1378,13 @@ class Window(Adw.ApplicationWindow):
                 f'{name}: установка {version}', ops.install_files_command(paths))))
 
         background(lambda: notes.for_version(name, version, url, aur.metainfo_file(files)), show_notes)
-        background(find_sources, show_sources)
+        if from_repo:
+            together.set_description('Эта версия есть в репозитории: обновление поставит её вместе с пакетами её сборки, '
+                                     'если это не потянет обновление общих пакетов.')
+            together.remove(together_wait)
+            warn.set_visible(False)
+        else:
+            background(find_sources, show_sources)
 
     def ask_single_update(self, name):
         s = self.snap
