@@ -1,6 +1,6 @@
 # Maintainer: vw6 <19575067+vw6 at users dot noreply dot github dot com>
 pkgname=keepup
-pkgver=0.2.0
+pkgver=0.3.0
 pkgrel=1
 pkgdesc="GNOME-style updates, versions and rollbacks for Arch, AUR and Flatpak"
 arch=('any')
@@ -15,7 +15,7 @@ optdepends=('paru: AUR updates and builds'
             'base-devel: building AUR packages'
             'limine-mkinitcpio-hook: choosing the default kernel in Limine')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('8a963426147a76bd7808a31387ce31ea17718b18c93b2af86070f007981376cb')
+sha256sums=('c6a0245add380c09d91f7d120fa38668ffceffa4e2e8f57f562768b17c46e579')
 
 check() {
   cd "$pkgname-$pkgver"
