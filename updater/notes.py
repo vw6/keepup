@@ -149,6 +149,13 @@ def _github_notes(data, owner, repo):
     return Notes(text=data['body'].strip(), source=f'выпуск на GitHub ({owner}/{repo})', link=data.get('html_url', ''))
 
 
+def for_version(name, version, url, metainfo_path):
+    """Примечания к версии пакета из репозитория: сама программа, выпуски GitHub, Flathub."""
+    notes = from_metainfo(metainfo_path, version) or from_github(url, version) or from_flathub(name, version, url) or Notes()
+    notes.version = version
+    return notes
+
+
 def collect(name, base, commit, prev_commit, url, metainfo_path):
     """Версия правки, примечания к ней из первого найденного места и что поменялось в сборке против прошлой правки."""
     with ThreadPoolExecutor(2) as pool:

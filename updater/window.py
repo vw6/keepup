@@ -10,7 +10,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Adw, Gdk, GLib, Gtk, Pango  # noqa: E402
 
-from . import appstream, aur, flatpak, kernels, news, notes, ops, pacman  # noqa: E402
+from . import appstream, archive, aur, flatpak, kernels, news, notes, ops, pacman  # noqa: E402
 
 PAGES = [
     ('overview', 'Обзор', 'view-grid-symbolic'),
@@ -364,16 +364,19 @@ class Window(Adw.ApplicationWindow):
             button.connect('clicked', lambda *_: self.confirm_upgrade())
             upd.set_header_suffix(button)
             for u in sorted(s.updates, key=lambda u: (not u.needs_reboot, u.name)):
-                r = row(u.name, f'{u.old}  →  {u.new}')
+                r = row(u.name, f'{u.old}  →  {u.new}', activatable=True)
                 if u.needs_reboot:
                     r.add_suffix(pill('перезагрузка', 'warn'))
+                r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+                r.connect('activated', lambda _r, n=u.name: self.show_pkg(n))
                 upd.add(r)
         else:
             upd.add(row('Обновлений нет', s.updates_error or 'все пакеты свежие'))
         page.add(upd)
 
         self.rollback_group = Adw.PreferencesGroup(
-            title='Откат версии', description='Пакеты, прошлые версии которых лежат в кэше pacman. Найдите пакет и выберите версию.')
+            title='Установленные пакеты', description='Найдите пакет: описание, история версий и сборки, другая версия из кэша '
+                                                      'или архива Arch, удаление.')
         search = Gtk.SearchEntry(placeholder_text='Найти пакет', valign=Gtk.Align.CENTER)
         search.set_text(self.rollback_query)
         search.connect('search-changed', self.on_rollback_search)
@@ -392,12 +395,13 @@ class Window(Adw.ApplicationWindow):
             self.rollback_group.remove(r)
         self.rollback_rows = []
         q = self.rollback_query
-        candidates = sorted((p for p in self.snap.packages.values() if p.cached and (not q or q in p.name.lower())),
+        foreign = self.snap.foreign
+        candidates = sorted((p for p in self.snap.packages.values() if p.name not in foreign and (p.cached if not q else q in p.name.lower())),
                             key=lambda p: (not p.name.lower().startswith(q), p.name))
         for pkg in candidates[:ROLLBACK_ROWS]:
             r = row(pkg.name, f'установлена {pkg.version} · в кэше версий: {len(pkg.cached)}', activatable=True)
             r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
-            r.connect('activated', lambda _r, name=pkg.name: self.ask_rollback(name))
+            r.connect('activated', lambda _r, name=pkg.name: self.show_pkg(name))
             self.rollback_group.add(r)
             self.rollback_rows.append(r)
         if len(candidates) > ROLLBACK_ROWS:
@@ -405,7 +409,7 @@ class Window(Adw.ApplicationWindow):
             self.rollback_group.add(r)
             self.rollback_rows.append(r)
         if not candidates:
-            r = row('Ничего не найдено', 'у этого пакета нет прошлых версий в кэше')
+            r = row('Ничего не найдено', 'без поиска показаны пакеты с прошлыми версиями в кэше; введите имя, чтобы найти любой')
             self.rollback_group.add(r)
             self.rollback_rows.append(r)
 
@@ -1078,6 +1082,269 @@ class Window(Adw.ApplicationWindow):
 
     # Действия
 
+    # Карточка пакета из репозитория
+
+    def show_pkg(self, name):
+        s = self.snap
+        pkg = s.packages.get(name)
+        if not pkg:
+            self.toast(f'{name} не установлен')
+            return
+        files = pacman_files(name)
+        local = aur.local_info(name)
+        meta = appstream.from_file(aur.metainfo_file(files)) if aur.metainfo_file(files) else None
+        update = next((u for u in s.updates if u.name == name), None)
+
+        page = Adw.PreferencesPage()
+        nav_page = self.detail_page(name, page)
+        head = Gtk.Box(spacing=18, margin_bottom=6)
+        head.append(_pkg_icon(aur.desktop_icon(files), 96))
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER, hexpand=True)
+        title = Gtk.Label(label=(meta.name if meta and meta.name else name), xalign=0, wrap=True)
+        title.add_css_class('title-1')
+        text.append(title)
+        text.append(Gtk.Label(label=(meta.summary if meta and meta.summary else local.get('Description', '')), xalign=0, wrap=True))
+        byline = Gtk.Label(label=f'{name} {pkg.version}', xalign=0, wrap=True)
+        byline.add_css_class('dim-label')
+        text.append(byline)
+        head.append(text)
+        buttons = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER)
+        if update:
+            b = Gtk.Button(label=f'Обновить до {update.new}')
+            b.add_css_class('suggested-action')
+            b.add_css_class('pill')
+            b.set_tooltip_text('В Arch пакеты обновляются только всей системой сразу')
+            b.connect('clicked', lambda *_: self.confirm_upgrade())
+            buttons.append(b)
+        b = Gtk.Button(label='Удалить')
+        b.add_css_class('destructive-action')
+        b.add_css_class('pill')
+        b.connect('clicked', lambda *_: self.confirm_repo_remove(name))
+        buttons.append(b)
+        head.append(buttons)
+        top = Adw.PreferencesGroup()
+        top.add(head)
+        page.add(top)
+        if update:
+            note = Adw.PreferencesGroup()
+            note.add(row(f'Есть {update.new}', 'в Arch пакеты обновляются только всей системой: кнопка обновит всё, что ждёт обновления'))
+            page.add(note)
+        if meta and meta.screenshots:
+            page.add(_screenshots(meta.screenshots))
+
+        repo = pacman.repo_info(name)
+        repo_group = Adw.PreferencesGroup(title='В репозитории')
+        if repo:
+            # Локальные списки пакетов могут отставать; свежую версию знает проверка обновлений.
+            repo_group.add(row('Версия', f'{update.new if update else repo.get("Version", "")} · {repo.get("Repository", "")}'))
+            for key, title_ in (('Packager', 'Собрал'), ('Build Date', 'Дата сборки'), ('Download Size', 'Размер загрузки')):
+                if repo.get(key):
+                    repo_group.add(row(title_, repo[key]))
+        else:
+            repo_group.add(row('Нет в подключённых репозиториях', 'пакет поставлен вручную или его репозиторий отключён'))
+        page.add(repo_group)
+
+        versions_group = Adw.PreferencesGroup(title='Версии', description='Выберите версию: что в ней изменилось и поставить её. '
+                                                                          'Сверху новые; прошлые берутся из кэша или архива Arch.')
+        wait = row('Загружаем архив версий…')
+        versions_group.add(wait)
+        page.add(versions_group)
+        history_group = Adw.PreferencesGroup(title='История сборки в Arch', description='Правки сборочного сценария пакета на GitLab Arch.')
+        history_wait = row('Загружаем историю…')
+        history_group.add(history_wait)
+        page.add(history_group)
+
+        description = meta.description if meta and meta.description else ''
+        if description:
+            about = Adw.PreferencesGroup(title='Описание')
+            label = Gtk.Label(label=description, wrap=True, xalign=0, selectable=True)
+            label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+            about.add(label)
+            page.add(about)
+        details = Adw.PreferencesGroup(title='Подробно')
+        for key, title_ in (('Installed Size', 'Размер'), ('Install Date', 'Установлен'), ('Install Reason', 'Причина установки'),
+                            ('Licenses', 'Лицензия'), ('Depends On', 'Зависимости'), ('Required By', 'Нужен пакетам')):
+            if local.get(key) and local[key] != 'None':
+                value = {'Explicitly installed': 'установлен вами', 'Installed as a dependency for another package': 'как зависимость'}.get(local[key], local[key])
+                details.add(row(title_, value))
+        if local.get('URL') and local['URL'] != 'None':
+            site = row('Сайт программы', local['URL'], activatable=True)
+            site.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
+            site.connect('activated', lambda *_: Gtk.UriLauncher(uri=local['URL']).launch(self, None, None))
+            details.add(site)
+        page.add(details)
+        self.nav.push(nav_page)
+
+        def show_versions(archived):
+            versions_group.remove(wait)
+            archived = [] if isinstance(archived, Exception) else archived
+            merged = {}
+            for c in pkg.cached:
+                merged.setdefault(c.version, {'cache': c.path})
+            for a in archived[:25]:
+                merged.setdefault(a.version, {})['archive'] = a.url
+            merged.setdefault(pkg.version, {})['installed'] = True
+            if update:
+                merged.setdefault(update.new, {})['repo'] = True
+            order = sorted(merged, key=lambda v: _VerKey(v), reverse=True)[:30]
+            for v in order:
+                where = merged[v]
+                tags = []
+                if where.get('installed'):
+                    tags.append('установлена')
+                if where.get('repo'):
+                    tags.append('в репозитории')
+                if where.get('cache'):
+                    tags.append('в кэше')
+                if where.get('archive'):
+                    tags.append('архив Arch')
+                only_repo = not (where.get('cache') or where.get('archive') or where.get('installed'))
+                if only_repo:
+                    tags.append('ставится обновлением системы')
+                r = row(f'Версия {v}', ' · '.join(tags), activatable=not where.get('installed') and not only_repo)
+                if where.get('installed'):
+                    r.add_suffix(pill('установлена', 'ok'))
+                elif where.get('repo'):
+                    r.add_suffix(pill('новейшая', 'info'))
+                if not where.get('installed') and not only_repo:
+                    r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+                    r.connect('activated', lambda _r, ver=v: self.show_pkg_version(name, ver, local.get('URL', ''), files))
+                versions_group.add(r)
+            if not archived:
+                versions_group.set_description(versions_group.get_description() + ' В архиве Arch этого пакета нет: '
+                                               'это сборка CachyOS или пакет не из Arch, доступны только версии из кэша.')
+
+        def show_history(result):
+            history_group.remove(history_wait)
+            if isinstance(result, Exception) or not result:
+                history_group.set_visible(False)
+                return
+            for date, title_, href in result:
+                r = row(title_, date, activatable=bool(href))
+                if href:
+                    r.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
+                    r.connect('activated', lambda _r, u=href: Gtk.UriLauncher(uri=u).launch(self, None, None))
+                history_group.add(r)
+
+        background(lambda: archive.versions(name), show_versions)
+        background(lambda: archive.packaging_log(pkg.base), show_history)
+
+    def show_pkg_version(self, name, version, url, files):
+        """Страница версии пакета из репозитория: примечания к выпуску и что поставится вместе с ним."""
+        s = self.snap
+        pkg = s.packages[name]
+        group_names = pacman.related(name, s.packages)
+        page = Adw.PreferencesPage()
+        nav_page = self.detail_page(f'{name} {version}', page)
+        head = Gtk.Box(spacing=18, margin_bottom=6)
+        head.append(_pkg_icon(aur.desktop_icon(files), 72))
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER, hexpand=True)
+        heading = Gtk.Label(label=f'{name} {version}', xalign=0, wrap=True)
+        heading.add_css_class('title-1')
+        text.append(heading)
+        newer = _VerKey(pkg.version) < _VerKey(version)
+        sub = Gtk.Label(label=f'Сейчас установлена {pkg.version}; эта версия ' + ('новее' if newer else 'старше'), xalign=0, wrap=True)
+        sub.add_css_class('dim-label')
+        text.append(sub)
+        head.append(text)
+        go = Gtk.Button(label='Поставить эту версию', valign=Gtk.Align.CENTER, sensitive=False)
+        go.add_css_class('suggested-action')
+        go.add_css_class('pill')
+        head.append(go)
+        top = Adw.PreferencesGroup()
+        top.add(head)
+        page.add(top)
+
+        program = Adw.PreferencesGroup(title='Что изменилось в программе')
+        changes = Gtk.Label(label='Ищем примечания к выпуску…', xalign=0, wrap=True, selectable=True,
+                            margin_top=14, margin_bottom=14, margin_start=16, margin_end=16)
+        changes.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        card.add_css_class('card')
+        card.append(changes)
+        program.add(card)
+        page.add(program)
+        links = Adw.PreferencesGroup(visible=False)
+        page.add(links)
+        together = Adw.PreferencesGroup(title='Что поставится', description='Пакеты одной сборки ставятся вместе одной версии, иначе система сломается.')
+        together_wait = row('Ищем файлы в кэше и архиве Arch…')
+        together.add(together_wait)
+        page.add(together)
+        warn = Adw.PreferencesGroup()
+        warn.add(row('Обновление вернёт новейшую', 'следующее обновление системы снова поставит версию из репозитория'))
+        page.add(warn)
+        self.nav.push(nav_page)
+
+        def show_notes(result):
+            if isinstance(result, Exception) or not result.text:
+                changes.set_label('Примечаний к этой версии не нашлось: ни у самой программы, ни в выпусках GitHub, ни на Flathub.')
+                site = url if url and url != 'None' else ''
+                if site:
+                    link = row('Сайт программы', site, activatable=True)
+                    link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
+                    link.connect('activated', lambda *_: Gtk.UriLauncher(uri=site).launch(self, None, None))
+                    links.add(link)
+                    links.set_visible(True)
+                return
+            set_markup_or_text(changes, markdown_markup(result.text), result.text)
+            program.set_description('Источник: ' + result.source)
+            if result.link:
+                link = row('Открыть источник', result.link, activatable=True)
+                link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
+                link.connect('activated', lambda *_: Gtk.UriLauncher(uri=result.link).launch(self, None, None))
+                links.add(link)
+                links.set_visible(True)
+
+        def find_sources():
+            sources = {}
+            for n in group_names:
+                cached = next((c.path for c in s.cache.get(n, []) if c.version == version), None)
+                if cached:
+                    sources[n] = (cached, 'кэш')
+                    continue
+                arch = next((a.url for a in archive.versions(n) if a.version == version), None)
+                sources[n] = (arch, 'архив Arch') if arch else (None, '')
+            return sources
+
+        def show_sources(sources):
+            together.remove(together_wait)
+            if isinstance(sources, Exception):
+                together.add(row('Не удалось найти файлы', str(sources)))
+                return
+            missing = [n for n, (src, _) in sources.items() if not src]
+            for n, (src, where) in sources.items():
+                r = row(n, f'{s.packages[n].version}  →  {version} · {where}' if src else 'этой версии нет ни в кэше, ни в архиве Arch')
+                if not src:
+                    r.add_suffix(pill('нет', 'warn'))
+                together.add(r)
+            if missing:
+                together.set_description('Не у всех пакетов этой сборки есть такая версия, поэтому поставить её нельзя: '
+                                         'пакеты разных версий сломали бы систему.')
+                return
+            go.set_sensitive(True)
+            paths = [src for src, _ in sources.values()]
+            go.connect('clicked', lambda *_: (self.nav.pop_to_tag('root'), self.run_op(
+                f'{name}: установка {version}', ops.install_files_command(paths))))
+
+        background(lambda: notes.for_version(name, version, url, aur.metainfo_file(files)), show_notes)
+        background(find_sources, show_sources)
+
+    def confirm_repo_remove(self, name):
+        group = Adw.PreferencesGroup()
+        deps = Adw.SwitchRow(title='Убрать ненужные зависимости', subtitle='пакеты, поставленные только ради этого и больше никому не нужные',
+                             active=True)
+        group.add(deps)
+        ask = Adw.AlertDialog(heading=f'Удалить {name}?', body='Пакет удалится из системы; настройки в домашней папке останутся. '
+                                                               'Если он нужен другим пакетам, pacman откажется и объяснит почему.')
+        ask.set_extra_child(group)
+        ask.add_response('cancel', 'Отмена')
+        ask.add_response('go', 'Удалить')
+        ask.set_response_appearance('go', Adw.ResponseAppearance.DESTRUCTIVE)
+        ask.set_default_response('cancel')
+        ask.connect('response', lambda _d, resp: resp == 'go' and (self.nav.pop_to_tag('root'), self.run_op(
+            f'Удаление {name}', pacman.remove_command(name, deps.get_active()))))
+        ask.present(self)
+
     def confirm_upgrade(self):
         s = self.snap
         reboot = [u.name for u in s.updates if u.needs_reboot]
@@ -1099,6 +1366,20 @@ class Window(Adw.ApplicationWindow):
             self.toast('pacman сейчас занят другой программой, попробуйте позже')
             return
         OperationDialog(title, cmd, lambda code: code == 0 and self.refresh()).present(self)
+
+
+class _VerKey:
+    """Порядок по самой версии программы: у сборок CachyOS и Arch разные эпохи (3:26.2.5 и 1:26.2.6), а программа одна."""
+    def __init__(self, version):
+        self.version = version
+
+    def __lt__(self, other):
+        c = pacman.vercmp(archive.plain(self.version), archive.plain(other.version))
+        return c < 0 if c else pacman.vercmp(self.version, other.version) < 0
+
+
+def pacman_files(name):
+    return aur.files_of([name]).get(name, [])
 
 
 def set_markup_or_text(label, markup, text):

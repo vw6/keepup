@@ -313,3 +313,23 @@ def reboot_reasons(log, boot):
         if e.when > boot and e.action in ('upgraded', 'downgraded', 'reinstalled') and REBOOT_PACKAGES.match(e.name):
             seen[e.name] = e
     return list(seen.values())
+
+
+def repo_info(name):
+    """Сведения о пакете в репозитории (pacman -Si), из первого по приоритету репозитория."""
+    out = subprocess.run(['pacman', '-Si', name], capture_output=True, stdin=subprocess.DEVNULL, text=True,
+                         env={**os.environ, 'LC_ALL': 'C'})
+    first = out.stdout.split('\n\n', 1)[0]
+    fields, key = {}, None
+    for line in first.splitlines():
+        if line[:1].strip() and ':' in line:
+            key, _, value = line.partition(':')
+            key = key.strip()
+            fields[key] = value.strip()
+        elif key and line.strip():
+            fields[key] += '\n' + line.strip()
+    return fields
+
+
+def remove_command(name, deps=True):
+    return ['pkexec', 'pacman', '-R' + ('ns' if deps else 'n'), '--noconfirm', name]
