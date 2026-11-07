@@ -239,3 +239,21 @@ class NewsArchive(unittest.TestCase):
                 self.assertEqual((items[1].title_ru, items[1].text_ru), ('Заголовок', 'Текст'))
             finally:
                 news.ARCHIVE = old
+
+
+class Progress(unittest.TestCase):
+    def test_stages_and_overall(self):
+        from keepup import progress
+        s, overall, values = progress.State(), progress.Overall(), []
+        for line in [':: Синхронизация баз данных пакетов...', 'загрузка файлов пакетов...', 'проверка целостности пакета...',
+                     'обновление amneziavpn-bin...', ':: Запуск post-transaction hooks...', '(3/6) Arming ConditionNeedsUpdate...',
+                     '(6/6) Updating the desktop file MIME type cache...']:
+            progress.feed(s, line)
+            values.append(overall.update(s))
+        self.assertEqual(s.stage, 'Настройка системы')
+        self.assertEqual(s.detail, 'Шаг 6 из 6')
+        self.assertEqual(values, sorted(values))
+        self.assertAlmostEqual(values[-1], 1.0)
+        a = progress.State()
+        progress.feed(a, 'обновление amneziavpn-bin...')
+        self.assertEqual((a.stage, a.detail), ('Установка', 'Обновление: amneziavpn-bin'))

@@ -10,7 +10,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Adw, Gdk, GLib, GObject, Gtk, Pango  # noqa: E402
 
-from . import NAME, appstream, archive, aur, flatpak, kernels, news, notes, ops, pacman, translate  # noqa: E402
+from . import NAME, appstream, archive, aur, flatpak, kernels, news, notes, ops, pacman, progress, translate  # noqa: E402
 
 PAGES = [
     ('overview', 'Обзор', 'view-grid-symbolic'),
@@ -150,37 +150,102 @@ def _result(future):
 
 
 class OperationDialog(Adw.Dialog):
-    """Окно с выводом команды, пока идёт действие; закрыть можно, только когда оно кончилось."""
+    """Ход действия просто: что сейчас делается, полоска готовности и итог крупно. Весь вывод команды пишется
+    в консоль с самого начала, даже когда она скрыта; кнопка «Консоль» её показывает."""
     def __init__(self, title, cmd, on_finished):
-        super().__init__(title=title, content_width=760, content_height=520, can_close=False)
+        super().__init__(title=title, content_width=620, can_close=False)
         self.on_finished = on_finished
+        self.state = progress.State()
+        self.overall = progress.Overall()
         view = Adw.ToolbarView()
-        header = Adw.HeaderBar()
-        self.spinner = Adw.Spinner()
-        header.pack_start(self.spinner)
-        view.add_top_bar(header)
-        self.status = Adw.Banner(title='Ждём подтверждения паролем…', revealed=True)
-        view.add_top_bar(self.status)
+        view.add_top_bar(Adw.HeaderBar(show_end_title_buttons=False, show_start_title_buttons=False, show_title=False))
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14, margin_top=12, margin_bottom=24, margin_start=24, margin_end=24)
+
+        self.icon_slot = Adw.Bin(halign=Gtk.Align.CENTER)
+        self.spinner = Adw.Spinner(width_request=56, height_request=56)
+        self.icon_slot.set_child(self.spinner)
+        box.append(self.icon_slot)
+        heading = Gtk.Label(label=title, wrap=True, justify=Gtk.Justification.CENTER)
+        heading.add_css_class('title-2')
+        box.append(heading)
+        self.stage = Gtk.Label(label=self.state.stage + '…', wrap=True, justify=Gtk.Justification.CENTER)
+        self.stage.add_css_class('heading')
+        box.append(self.stage)
+        self.bar = Gtk.ProgressBar(margin_top=4)
+        box.append(self.bar)
+        self.detail = Gtk.Label(label=' ', wrap=True, justify=Gtk.Justification.CENTER, ellipsize=Pango.EllipsizeMode.MIDDLE)
+        self.detail.add_css_class('dim-label')
+        self.detail.add_css_class('caption')
+        box.append(self.detail)
+
         self.buffer = Gtk.TextBuffer()
         text = Gtk.TextView(buffer=self.buffer, editable=False, cursor_visible=False, monospace=True,
-                            wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=12, bottom_margin=12, left_margin=12, right_margin=12)
-        self.scroll = Gtk.ScrolledWindow(child=text, vexpand=True)
-        view.set_content(self.scroll)
+                            wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=10, bottom_margin=10, left_margin=10, right_margin=10)
+        self.scroll = Gtk.ScrolledWindow(child=text, min_content_height=280, max_content_height=280)
+        self.scroll.add_css_class('card')
+        self.console = Gtk.Revealer(child=self.scroll, transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
+        box.append(self.console)
+
+        buttons = Gtk.Box(spacing=12, halign=Gtk.Align.CENTER, margin_top=6)
+        self.console_button = Gtk.ToggleButton(child=Adw.ButtonContent(icon_name='utilities-terminal-symbolic', label='Консоль'))
+        self.console_button.add_css_class('pill')
+        self.console_button.connect('toggled', self.on_console)
+        buttons.append(self.console_button)
+        self.close_button = Gtk.Button(label='Закрыть', sensitive=False)
+        self.close_button.add_css_class('pill')
+        self.close_button.add_css_class('suggested-action')
+        self.close_button.connect('clicked', lambda *_: self.close())
+        buttons.append(self.close_button)
+        box.append(buttons)
+
+        view.set_content(box)
         self.set_child(view)
+        self.pulsing = GLib.timeout_add(120, self.pulse)
         ops.run(cmd, self.add_line, self.finish)
 
+    def on_console(self, button):
+        self.console.set_reveal_child(button.get_active())
+        if button.get_active():
+            adj = self.scroll.get_vadjustment()
+            GLib.idle_add(lambda: adj.set_value(adj.get_upper()))
+
+    def pulse(self):
+        # Пока доля неизвестна, полоска «бежит»; как только известна, стоит на месте и растёт.
+        if self.overall.value <= 0:
+            self.bar.pulse()
+        return self.pulsing is not None
+
     def add_line(self, line):
-        if self.buffer.get_char_count() == 0:
-            self.status.set_title('Идёт работа')
         self.buffer.insert(self.buffer.get_end_iter(), line + '\n')
-        adj = self.scroll.get_vadjustment()
-        GLib.idle_add(lambda: adj.set_value(adj.get_upper()))
+        if self.console.get_reveal_child():
+            adj = self.scroll.get_vadjustment()
+            GLib.idle_add(lambda: adj.set_value(adj.get_upper()))
+        if progress.feed(self.state, line):
+            self.stage.set_label(self.state.stage + '…')
+            self.detail.set_label(self.state.detail or ' ')
+            value = self.overall.update(self.state)
+            if value > 0:
+                self.bar.set_fraction(value)
 
     def finish(self, code):
-        self.spinner.set_visible(False)
-        messages = {0: 'Готово', 126: 'Отменено: пароль не введён', 127: 'Нет прав на это действие'}
-        self.status.set_title(messages.get(code, f'Завершилось с ошибкой (код {code}), подробности выше'))
+        self.pulsing = None
         self.set_can_close(True)
+        self.close_button.set_sensitive(True)
+        ok = code == 0
+        icon = Gtk.Image(icon_name='object-select-symbolic' if ok else 'dialog-error-symbolic', pixel_size=56)
+        icon.add_css_class('success' if ok else 'error')
+        self.icon_slot.set_child(icon)
+        messages = {0: 'Готово', 126: 'Отменено: пароль не введён', 127: 'Нет прав на это действие'}
+        self.stage.set_label(messages.get(code, 'Не получилось'))
+        if ok:
+            self.bar.set_fraction(1.0)
+            self.detail.set_label('Всё установлено, можно закрыть окно.')
+        else:
+            self.detail.set_label('' if code in (126, 127) else f'Команда завершилась с ошибкой (код {code}). Подробности в консоли.')
+            if code not in (126, 127):
+                self.console_button.set_active(True)
+        adj = self.scroll.get_vadjustment()
+        GLib.idle_add(lambda: adj.set_value(adj.get_upper()))
         self.on_finished(code)
 
 
@@ -1659,7 +1724,11 @@ class Window(Adw.ApplicationWindow):
         if pacman_lock and ops.busy():
             self.toast('pacman сейчас занят другой программой, попробуйте позже')
             return
-        OperationDialog(title, cmd, lambda code: code == 0 and self.refresh()).present(self)
+        def done(code):
+            if code == 0:
+                self.toast(f'{title}: готово')
+                self.refresh()
+        OperationDialog(title, cmd, done).present(self)
 
 
 class _VerKey:
