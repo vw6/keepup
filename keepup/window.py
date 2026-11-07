@@ -149,104 +149,173 @@ def _result(future):
         return [], str(e)
 
 
-class OperationDialog(Adw.Dialog):
-    """Ход действия просто: что сейчас делается, полоска готовности и итог крупно. Весь вывод команды пишется
-    в консоль с самого начала, даже когда она скрыта; кнопка «Консоль» её показывает."""
+class Operation:
+    """Действие с правами: команда идёт в фоне, ход и весь вывод доступны всем, кто подписан (строка внизу окна,
+    полоска на месте кнопок страницы). Вывод копится с самого начала, даже пока консоль не открыта."""
     def __init__(self, title, cmd, on_finished):
-        super().__init__(title=title, content_width=620, can_close=False)
-        self.on_finished = on_finished
+        self.title = title
         self.state = progress.State()
         self.overall = progress.Overall()
-        view = Adw.ToolbarView()
-        view.add_top_bar(Adw.HeaderBar(show_end_title_buttons=False, show_start_title_buttons=False, show_title=False))
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14, margin_top=12, margin_bottom=24, margin_start=24, margin_end=24)
+        self.buffer = Gtk.TextBuffer()
+        self.code = None
+        self.listeners = []
+        self.on_finished = on_finished
+        ops.run(cmd, self._line, self._done)
 
-        self.icon_slot = Adw.Bin(halign=Gtk.Align.CENTER)
-        self.spinner = Adw.Spinner(width_request=56, height_request=56)
-        self.icon_slot.set_child(self.spinner)
-        box.append(self.icon_slot)
-        heading = Gtk.Label(label=title, wrap=True, justify=Gtk.Justification.CENTER)
-        heading.add_css_class('title-2')
-        box.append(heading)
-        self.stage = Gtk.Label(label=self.state.stage + '…', wrap=True, justify=Gtk.Justification.CENTER)
+    def listen(self, fn):
+        self.listeners.append(fn)
+        fn(self)
+
+    def _notify(self):
+        for fn in list(self.listeners):
+            fn(self)
+
+    def _line(self, line):
+        self.buffer.insert(self.buffer.get_end_iter(), line + '\n')
+        if progress.feed(self.state, line):
+            self.overall.update(self.state)
+            self._notify()
+
+    def _done(self, code):
+        self.code = code
+        if code == 0:
+            self.overall.value = 1.0
+        self._notify()
+        self.on_finished(code)
+
+    @property
+    def finished(self):
+        return self.code is not None
+
+    def result(self):
+        return {0: 'Готово', 126: 'Отменено: пароль не введён', 127: 'Нет прав на это действие'}.get(self.code, 'Не получилось')
+
+
+class InlineProgress(Gtk.Box):
+    """Полоска хода на месте кнопок страницы: этап, доля готовности, итог."""
+    def __init__(self, op):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6, valign=Gtk.Align.CENTER, width_request=220)
+        self.stage = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END)
         self.stage.add_css_class('heading')
-        box.append(self.stage)
-        self.bar = Gtk.ProgressBar(margin_top=4)
-        box.append(self.bar)
-        self.detail = Gtk.Label(label=' ', wrap=True, justify=Gtk.Justification.CENTER, ellipsize=Pango.EllipsizeMode.MIDDLE)
+        self.bar = Gtk.ProgressBar()
+        self.detail = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.MIDDLE)
         self.detail.add_css_class('dim-label')
         self.detail.add_css_class('caption')
-        box.append(self.detail)
+        for w in (self.stage, self.bar, self.detail):
+            self.append(w)
+        GLib.timeout_add(120, self._pulse, op)
+        op.listen(self._show)
 
-        self.buffer = Gtk.TextBuffer()
-        text = Gtk.TextView(buffer=self.buffer, editable=False, cursor_visible=False, monospace=True,
-                            wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=10, bottom_margin=10, left_margin=10, right_margin=10)
-        self.scroll = Gtk.ScrolledWindow(child=text, min_content_height=280, max_content_height=280)
-        self.scroll.add_css_class('card')
-        self.console = Gtk.Revealer(child=self.scroll, transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
-        box.append(self.console)
-
-        buttons = Gtk.Box(spacing=12, halign=Gtk.Align.CENTER, margin_top=6)
-        self.console_button = Gtk.ToggleButton(child=Adw.ButtonContent(icon_name='utilities-terminal-symbolic', label='Консоль'))
-        self.console_button.add_css_class('pill')
-        self.console_button.connect('toggled', self.on_console)
-        buttons.append(self.console_button)
-        self.close_button = Gtk.Button(label='Закрыть', sensitive=False)
-        self.close_button.add_css_class('pill')
-        self.close_button.add_css_class('suggested-action')
-        self.close_button.connect('clicked', lambda *_: self.close())
-        buttons.append(self.close_button)
-        box.append(buttons)
-
-        view.set_content(box)
-        self.set_child(view)
-        self.pulsing = GLib.timeout_add(120, self.pulse)
-        ops.run(cmd, self.add_line, self.finish)
-
-    def on_console(self, button):
-        self.console.set_reveal_child(button.get_active())
-        if button.get_active():
-            adj = self.scroll.get_vadjustment()
-            GLib.idle_add(lambda: adj.set_value(adj.get_upper()))
-
-    def pulse(self):
-        # Пока доля неизвестна, полоска «бежит»; как только известна, стоит на месте и растёт.
-        if self.overall.value <= 0:
+    def _pulse(self, op):
+        if not op.finished and op.overall.value <= 0:
             self.bar.pulse()
-        return self.pulsing is not None
+        return not op.finished
 
-    def add_line(self, line):
-        self.buffer.insert(self.buffer.get_end_iter(), line + '\n')
-        if self.console.get_reveal_child():
-            adj = self.scroll.get_vadjustment()
-            GLib.idle_add(lambda: adj.set_value(adj.get_upper()))
-        if progress.feed(self.state, line):
-            self.stage.set_label(self.state.stage + '…')
-            self.detail.set_label(self.state.detail or ' ')
-            value = self.overall.update(self.state)
-            if value > 0:
-                self.bar.set_fraction(value)
+    def _show(self, op):
+        if op.finished:
+            self.stage.set_label(op.result())
+            self.stage.remove_css_class('error')
+            self.stage.add_css_class('success' if op.code == 0 else 'error')
+            self.bar.set_fraction(1.0 if op.code == 0 else self.bar.get_fraction())
+            self.detail.set_label('изменения применены' if op.code == 0 else 'подробности в консоли внизу')
+            return
+        self.stage.set_label(op.state.stage + '…')
+        self.detail.set_label(op.state.detail or ' ')
+        if op.overall.value > 0:
+            self.bar.set_fraction(op.overall.value)
 
-    def finish(self, code):
-        self.pulsing = None
-        self.set_can_close(True)
-        self.close_button.set_sensitive(True)
-        ok = code == 0
-        icon = Gtk.Image(icon_name='object-select-symbolic' if ok else 'dialog-error-symbolic', pixel_size=56)
-        icon.add_css_class('success' if ok else 'error')
-        self.icon_slot.set_child(icon)
-        messages = {0: 'Готово', 126: 'Отменено: пароль не введён', 127: 'Нет прав на это действие'}
-        self.stage.set_label(messages.get(code, 'Не получилось'))
-        if ok:
-            self.bar.set_fraction(1.0)
-            self.detail.set_label('Всё установлено, можно закрыть окно.')
-        else:
-            self.detail.set_label('' if code in (126, 127) else f'Команда завершилась с ошибкой (код {code}). Подробности в консоли.')
-            if code not in (126, 127):
-                self.console_button.set_active(True)
+
+class OperationBar(Gtk.Box):
+    """Строка хода внизу окна, видна на любой вкладке и странице; «Консоль» раскрывает весь вывод над ней."""
+    def __init__(self):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL)
+        self.op = None
+        self.view = Gtk.TextView(editable=False, cursor_visible=False, monospace=True, wrap_mode=Gtk.WrapMode.WORD_CHAR,
+                                 top_margin=10, bottom_margin=10, left_margin=12, right_margin=12)
+        self.scroll = Gtk.ScrolledWindow(child=self.view, min_content_height=260, max_content_height=260)
+        self.scroll.add_css_class('view')
+        self.console = Gtk.Revealer(child=self.scroll, transition_type=Gtk.RevealerTransitionType.SLIDE_UP)
+        self.append(self.console)
+        self.append(Gtk.Separator())
+        row_box = Gtk.Box(spacing=14, margin_top=10, margin_bottom=10, margin_start=16, margin_end=12)
+        self.icon = Adw.Bin(valign=Gtk.Align.CENTER)
+        row_box.append(self.icon)
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, hexpand=True, valign=Gtk.Align.CENTER)
+        self.title = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END)
+        self.title.add_css_class('heading')
+        self.stage = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.MIDDLE)
+        self.stage.add_css_class('dim-label')
+        self.stage.add_css_class('caption')
+        self.bar = Gtk.ProgressBar()
+        for w in (self.title, self.stage, self.bar):
+            text.append(w)
+        row_box.append(text)
+        self.console_button = Gtk.ToggleButton(icon_name='utilities-terminal-symbolic', tooltip_text='Консоль: весь вывод с начала',
+                                               valign=Gtk.Align.CENTER)
+        self.console_button.add_css_class('flat')
+        self.console_button.connect('toggled', self._toggle_console)
+        row_box.append(self.console_button)
+        self.close_button = Gtk.Button(icon_name='window-close-symbolic', tooltip_text='Убрать', valign=Gtk.Align.CENTER, visible=False)
+        self.close_button.add_css_class('flat')
+        self.close_button.connect('clicked', lambda *_: self.hide_bar())
+        row_box.append(self.close_button)
+        self.append(row_box)
+        self.revealer = None
+
+    def attach(self, op, revealer):
+        self.op = op
+        self.revealer = revealer
+        self.view.set_buffer(op.buffer)
+        self.title.set_label(op.title)
+        self.icon.set_child(Adw.Spinner(width_request=24, height_request=24))
+        self.close_button.set_visible(False)
+        self.bar.set_fraction(0)
+        self.console_button.set_active(False)
+        revealer.set_reveal_child(True)
+        GLib.timeout_add(120, self._pulse, op)
+        op.listen(self._show)
+
+    def _pulse(self, op):
+        if op is self.op and not op.finished and op.overall.value <= 0:
+            self.bar.pulse()
+        return op is self.op and not op.finished
+
+    def _toggle_console(self, button):
+        self.console.set_reveal_child(button.get_active())
+        # Прокрутить к концу, когда панель уже раскрылась и знает свою высоту.
+        GLib.timeout_add(self.console.get_transition_duration() + 50, lambda: self._scroll_end() and False)
+
+    def _scroll_end(self):
         adj = self.scroll.get_vadjustment()
         GLib.idle_add(lambda: adj.set_value(adj.get_upper()))
-        self.on_finished(code)
+
+    def _show(self, op):
+        if op is not self.op:
+            return
+        if self.console.get_reveal_child():
+            self._scroll_end()
+        if op.finished:
+            ok = op.code == 0
+            icon = Gtk.Image(icon_name='object-select-symbolic' if ok else 'dialog-error-symbolic', pixel_size=24)
+            icon.add_css_class('success' if ok else 'error')
+            self.icon.set_child(icon)
+            self.stage.set_label(op.result() + ('' if ok or op.code in (126, 127) else f' (код {op.code}); подробности в консоли'))
+            if ok:
+                self.bar.set_fraction(1.0)
+            elif op.code not in (126, 127):
+                self.console_button.set_active(True)
+            self.close_button.set_visible(True)
+            return
+        self.stage.set_label(op.state.stage + '…' + (f'  ·  {op.state.detail}' if op.state.detail else ''))
+        if op.overall.value > 0:
+            self.bar.set_fraction(op.overall.value)
+
+    def hide_bar(self):
+        if self.op and not self.op.finished:
+            return
+        self.console_button.set_active(False)
+        if self.revealer:
+            self.revealer.set_reveal_child(False)
 
 
 class Window(Adw.ApplicationWindow):
@@ -293,9 +362,17 @@ class Window(Adw.ApplicationWindow):
             self.stack.add_named(holder, key)
         content.set_content(self.stack)
         # Карточка приложения или пакета открывается как страница поверх вкладки, со стрелкой «назад» в заголовке.
-        self.nav = Adw.NavigationView()
+        self.nav = Adw.NavigationView(vexpand=True)
         self.nav.add(Adw.NavigationPage(title=PAGES[0][1], tag='root', child=content))
-        self.content_page = Adw.NavigationPage(title=PAGES[0][1], child=self.nav)
+        # Ход действия показывается внизу правой части, под любой открытой страницей, без отдельного окна.
+        self.op_bar = OperationBar()
+        self.op_revealer = Gtk.Revealer(child=self.op_bar, transition_type=Gtk.RevealerTransitionType.SLIDE_UP)
+        self.operation = None
+        self.anchors = {}
+        right = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        right.append(self.nav)
+        right.append(self.op_revealer)
+        self.content_page = Adw.NavigationPage(title=PAGES[0][1], child=right)
         split.set_content(self.content_page)
         self.split = split
 
@@ -791,6 +868,7 @@ class Window(Adw.ApplicationWindow):
         b.connect('clicked', lambda *_: self.confirm_pkg_remove(dialog, name))
         buttons.append(b)
         head.append(buttons)
+        self.set_anchor(dialog, buttons)
         top = Adw.PreferencesGroup()
         top.add(head)
         page.add(top)
@@ -889,17 +967,23 @@ class Window(Adw.ApplicationWindow):
         nav_page.connect('shown', lambda *_: self.set_focus(None))
         self.nav.push(nav_page)
 
-    def detail_page(self, title, page):
+    def detail_page(self, title, page, anchor=None):
         view = Adw.ToolbarView()
         view.add_top_bar(Adw.HeaderBar())
         view.set_content(page)
-        return Adw.NavigationPage(title=title, child=view)
+        self.page_counter = getattr(self, 'page_counter', 0) + 1
+        nav_page = Adw.NavigationPage(title=title, child=view, tag=f'detail-{self.page_counter}')
+        if anchor is not None:
+            self.anchors[nav_page.get_tag()] = anchor
+        return nav_page
+
+    def set_anchor(self, nav_page, anchor):
+        self.anchors[nav_page.get_tag()] = anchor
 
     def close_detail(self, parent):
         # Окно сборок Flatpak это настоящий диалог: его закрываем, а страницу карточки снимаем со стека.
         if isinstance(parent, Adw.Dialog):
             parent.close()
-        self.nav.pop_to_tag('root')
 
     def confirm_aur_build(self, name, base, commit, prev, title, date):
         """Страница версии из правки AUR: примечания к выпуску, изменения сборки и кнопка сборки."""
@@ -922,9 +1006,10 @@ class Window(Adw.ApplicationWindow):
         go.add_css_class('suggested-action')
         go.add_css_class('pill')
         installed = set(self.snap.packages)
-        go.connect('clicked', lambda *_: (self.nav.pop_to_tag('root'), self.run_op(
+        go.connect('clicked', lambda *_: (self.run_op(
             f'Сборка {name} ({date})', aur.build_commands(base, commit, installed))))
         head.append(go)
+        self.set_anchor(nav_page, go)
         top = Adw.PreferencesGroup()
         top.add(head)
         page.add(top)
@@ -1099,6 +1184,7 @@ class Window(Adw.ApplicationWindow):
         remove.connect('clicked', lambda *_: self.confirm_app_remove(dialog, app))
         buttons.append(remove)
         head.append(buttons)
+        self.set_anchor(dialog, buttons)
         top = Adw.PreferencesGroup()
         top.add(head)
         page.add(top)
@@ -1406,6 +1492,7 @@ class Window(Adw.ApplicationWindow):
         b.connect('clicked', lambda *_: self.confirm_repo_remove(name))
         buttons.append(b)
         head.append(buttons)
+        self.set_anchor(nav_page, buttons)
         top = Adw.PreferencesGroup()
         top.add(head)
         page.add(top)
@@ -1563,6 +1650,7 @@ class Window(Adw.ApplicationWindow):
         go.add_css_class('suggested-action')
         go.add_css_class('pill')
         head.append(go)
+        self.set_anchor(nav_page, go)
         top = Adw.PreferencesGroup()
         top.add(head)
         page.add(top)
@@ -1635,7 +1723,7 @@ class Window(Adw.ApplicationWindow):
                 return
             go.set_sensitive(True)
             paths = [src for src, _ in sources.values()]
-            go.connect('clicked', lambda *_: (self.nav.pop_to_tag('root'), self.run_op(
+            go.connect('clicked', lambda *_: (self.run_op(
                 f'{name}: установка {version}', ops.install_files_command(paths))))
 
         background(lambda: notes.for_version(name, version, url, aur.metainfo_file(files)), show_notes)
@@ -1682,7 +1770,7 @@ class Window(Adw.ApplicationWindow):
             ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
             ask.set_default_response('cancel')
             urls = [t.url for t in targets]
-            ask.connect('response', lambda _d, resp: resp == 'go' and (self.nav.pop_to_tag('root'), self.run_op(
+            ask.connect('response', lambda _d, resp: resp == 'go' and (self.run_op(
                 f'Обновление {name}', pacman.install_urls_command(urls))))
             ask.present(self)
 
@@ -1700,7 +1788,7 @@ class Window(Adw.ApplicationWindow):
         ask.add_response('go', 'Удалить')
         ask.set_response_appearance('go', Adw.ResponseAppearance.DESTRUCTIVE)
         ask.set_default_response('cancel')
-        ask.connect('response', lambda _d, resp: resp == 'go' and (self.nav.pop_to_tag('root'), self.run_op(
+        ask.connect('response', lambda _d, resp: resp == 'go' and (self.run_op(
             f'Удаление {name}', pacman.remove_command(name, deps.get_active()))))
         ask.present(self)
 
@@ -1724,11 +1812,21 @@ class Window(Adw.ApplicationWindow):
         if pacman_lock and ops.busy():
             self.toast('pacman сейчас занят другой программой, попробуйте позже')
             return
+        if self.operation and not self.operation.finished:
+            self.toast('Дождитесь окончания текущего действия')
+            return
+
         def done(code):
             if code == 0:
-                self.toast(f'{title}: готово')
                 self.refresh()
-        OperationDialog(title, cmd, done).present(self)
+        self.operation = Operation(title, cmd, done)
+        self.op_bar.attach(self.operation, self.op_revealer)
+        page = self.nav.get_visible_page()
+        anchor = self.anchors.get(page.get_tag()) if page else None
+        if anchor is not None and anchor.get_parent() is not None:
+            # Кнопки страницы на время действия превращаются в полоску хода.
+            anchor.set_visible(False)
+            anchor.get_parent().insert_child_after(InlineProgress(self.operation), anchor)
 
 
 class _VerKey:
