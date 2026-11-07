@@ -10,7 +10,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Adw, Gdk, GLib, GObject, Gtk, Pango  # noqa: E402
 
-from . import appstream, archive, aur, flatpak, kernels, news, notes, ops, pacman  # noqa: E402
+from . import appstream, archive, aur, flatpak, kernels, news, notes, ops, pacman, translate  # noqa: E402
 
 PAGES = [
     ('overview', 'Обзор', 'view-grid-symbolic'),
@@ -370,7 +370,7 @@ class Window(Adw.ApplicationWindow):
             for item in touching[:5]:
                 r = row(item.title, f'{_date(item.date)} · касается: {", ".join(item.touches)}', activatable=True)
                 r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
-                r.connect('activated', lambda *_: self.open_page('news'))
+                r.connect('activated', lambda _r, it=item: self.show_news(it))
                 news_group.add(r)
         else:
             news_group.add(row('Таких новостей нет', 'свежие новости Arch не упоминают пакеты из списка обновлений'))
@@ -386,27 +386,123 @@ class Window(Adw.ApplicationWindow):
 
     def build_news(self):
         page = Adw.PreferencesPage()
+        can = translate.available()
+        self.news_translate = can and translate.load_settings().get('translate_news', True)
+        if can:
+            options = Adw.PreferencesGroup()
+            switch = Adw.SwitchRow(title='Переводить на русский', active=self.news_translate,
+                                   subtitle='машинный перевод через translate-shell; команды, версии и имена пакетов не переводятся')
+            switch.connect('notify::active', self.on_news_translate)
+            options.add(switch)
+            page.add(options)
         desc = None if self.snap.news_fresh else 'Сеть недоступна: показана последняя сохранённая лента.'
         group = Adw.PreferencesGroup(title='Новости Arch Linux', description=desc)
         page.add(group)
         if not self.snap.news:
             group.add(row('Новостей нет', 'лента не загрузилась и сохранённой копии нет'))
             return page
+        self.news_rows = []
         for item in self.snap.news[:30]:
-            exp = expander(item.title, _date(item.date))
+            title = (translate.cached(item.title) if self.news_translate else None) or item.title
+            r = row(title, _date(item.date), activatable=True)
             if item.touches:
-                exp.add_suffix(pill('касается: ' + ', '.join(item.touches[:3]), 'warn'))
-            body = Gtk.Label(label=item.text, wrap=True, xalign=0, selectable=True,
-                             margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
-            body.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-            exp.add_row(body)
-            if item.link:
-                link = Adw.ActionRow(title='Открыть на сайте', activatable=True)
-                link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
-                link.connect('activated', lambda _r, url=item.link: Gtk.UriLauncher(uri=url).launch(self, None, None))
-                exp.add_row(link)
-            group.add(exp)
+                r.add_suffix(pill('касается: ' + ', '.join(item.touches[:3]), 'warn'))
+            r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+            r.connect('activated', lambda _r, it=item: self.show_news(it))
+            group.add(r)
+            self.news_rows.append((item, r))
+        self.translate_titles()
         return page
+
+    def on_news_translate(self, switch, _pspec):
+        self.news_translate = switch.get_active()
+        translate.save_setting('translate_news', self.news_translate)
+        for item, r in getattr(self, 'news_rows', []):
+            r.set_title((translate.cached(item.title) if self.news_translate else None) or item.title)
+        self.translate_titles()
+
+    def translate_titles(self):
+        """Заголовки без готового перевода переводятся в фоне по одному и подменяются в списке по мере готовности."""
+        if not self.news_translate:
+            return
+        todo = [(item, r) for item, r in getattr(self, 'news_rows', []) if translate.cached(item.title) is None]
+
+        def one(rest):
+            if not rest or not self.news_translate:
+                return
+            item, r = rest[0]
+            background(lambda: translate.translate(item.title),
+                       lambda result: (not isinstance(result, Exception) and self.news_translate and r.set_title(result), one(rest[1:])))
+        one(todo)
+
+    def show_news(self, item):
+        """Новость страницей во всё окно: перевод или оригинал, кого из пакетов касается, ссылка на сайт."""
+        page = WidePage()
+        nav_page = self.detail_page('Новость Arch', page)
+        can = translate.available()
+        head = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_bottom=6)
+        title = Gtk.Label(label=item.title, xalign=0, wrap=True, selectable=True)
+        title.add_css_class('title-1')
+        head.append(title)
+        meta = Gtk.Box(spacing=8)
+        date = Gtk.Label(label=_date(item.date), xalign=0)
+        date.add_css_class('dim-label')
+        meta.append(date)
+        if item.touches:
+            meta.append(pill('касается ваших обновлений: ' + ', '.join(item.touches[:4]), 'warn'))
+        head.append(meta)
+        if can:
+            # Переключатель отдельной строкой: в заголовке группы он сжимался до «Перев…».
+            toggle = Adw.ToggleGroup(halign=Gtk.Align.START, margin_top=6)
+            toggle.add(Adw.Toggle(label='Перевод', name='ru'))
+            toggle.add(Adw.Toggle(label='Оригинал', name='en'))
+            toggle.set_active_name('ru' if self.news_translate else 'en')
+            head.append(toggle)
+        top = Adw.PreferencesGroup()
+        top.add(head)
+        page.add(top)
+
+        body_group = Adw.PreferencesGroup()
+        body_group.set_title('Текст')
+        body = Gtk.Label(label=item.text, xalign=0, wrap=True, selectable=True,
+                         margin_top=14, margin_bottom=14, margin_start=16, margin_end=16)
+        body.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        card.add_css_class('card')
+        card.append(body)
+        body_group.add(card)
+        page.add(body_group)
+        if item.link:
+            links = Adw.PreferencesGroup()
+            link = row('Открыть на сайте Arch', item.link, activatable=True)
+            link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
+            link.connect('activated', lambda *_: Gtk.UriLauncher(uri=item.link).launch(self, None, None))
+            links.add(link)
+            page.add(links)
+        self.nav.push(nav_page)
+
+        def show(lang):
+            if lang == 'en' or not can:
+                title.set_label(item.title)
+                body.set_label(item.text)
+                body_group.set_description(None)
+                return
+            body_group.set_description('Переводим…')
+
+            def done(result):
+                if isinstance(result, Exception):
+                    body_group.set_description(f'Перевод не удался: {result}. Показан оригинал.')
+                    return
+                if not can or toggle.get_active_name() != 'ru':
+                    return
+                title.set_label(result[0])
+                body.set_label(result[1])
+                body_group.set_description('Машинный перевод; при сомнениях сверьтесь с оригиналом.')
+            background(lambda: (translate.translate(item.title), translate.translate(item.text)), done)
+
+        if can:
+            toggle.connect('notify::active-name', lambda t, _p: show(t.get_active_name()))
+            show(toggle.get_active_name())
 
     # Пакеты
 

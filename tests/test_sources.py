@@ -203,3 +203,16 @@ class Search(unittest.TestCase):
         self.assertFalse(other.get_visible())
         _filter_widget(page, '')
         self.assertTrue(mesa.get_visible() and other.get_visible() and inner_x.get_visible())
+
+
+class Translate(unittest.TestCase):
+    def test_protect(self):
+        from updater import translate
+        names = {'php-legacy', 'ca-certificates-mozilla'}
+        text = 'Update to php-legacy ≥ 8.3.36 and/or re-enroll the man-in-the-middle `pacman -Syu` https://a.b/c\n# mkinitcpio -P'
+        masked, kept = translate.protect(text, names)
+        self.assertEqual(kept, ['php-legacy', '8.3.36', '`pacman -Syu`', 'https://a.b/c', '# mkinitcpio -P'])
+        self.assertIn('and/or', masked)
+        self.assertIn('re-enroll', masked)
+        self.assertIn('man-in-the-middle', masked)
+        self.assertEqual(translate.restore(masked, kept), text)
