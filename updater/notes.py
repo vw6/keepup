@@ -1,6 +1,7 @@
 """Примечания к выпуску версии пакета AUR: что поменялось в программе и в сборке."""
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -113,25 +114,30 @@ def from_flathub(name, version, url=''):
     return None
 
 
+_RELEASES = {}
+
+
+def github_releases(owner, repo):
+    """Последние выпуски одним запросом; запоминаются на время работы программы. Ответы «не найдено» у GitHub
+    приходят по нескольку секунд, поэтому метки по одной не перебираются."""
+    key = (owner.lower(), repo.lower())
+    if key not in _RELEASES:
+        _RELEASES[key] = json.loads(_get(f'https://api.github.com/repos/{owner}/{repo}/releases?per_page=100',
+                                         accept='application/vnd.github+json'))
+    return _RELEASES[key]
+
+
 def from_github(url, version):
     m = GITHUB.match(url or '')
     if not m:
         return None
     owner, repo = m.group(1), m.group(2).removesuffix('.git')
     want = _plain_version(version)
-    for tag in (f'v{want}', want):
-        try:
-            data = json.loads(_get(f'https://api.github.com/repos/{owner}/{repo}/releases/tags/{urllib.parse.quote(tag)}',
-                                   accept='application/vnd.github+json'))
-        except OSError:
-            continue
-        if data.get('body'):
-            return _github_notes(data, owner, repo)
-    # Метки бывают и с приставкой (ttl-v2.5.1, release-2.5.1): ищем среди последних выпусков по номеру версии.
     try:
-        releases = json.loads(_get(f'https://api.github.com/repos/{owner}/{repo}/releases?per_page=50', accept='application/vnd.github+json'))
-    except OSError:
+        releases = github_releases(owner, repo)
+    except (OSError, ValueError):
         return None
+    # Метка может быть v2.5.2, 2.5.2 или с приставкой (ttl-v2.5.2, release-2.5.2): ищем номер версии целиком.
     token = re.compile(r'(?<![\d.])' + re.escape(want) + r'(?![\d])')
     for data in releases:
         if data.get('body') and (token.search(data.get('tag_name', '')) or token.search(data.get('name') or '')):
@@ -145,18 +151,19 @@ def _github_notes(data, owner, repo):
 
 def collect(name, base, commit, prev_commit, url, metainfo_path):
     """Версия правки, примечания к ней из первого найденного места и что поменялось в сборке против прошлой правки."""
-    new = srcinfo(base, commit)
-    version = version_of(new)
-    notes = (from_metainfo(metainfo_path, version) or from_flathub(name, version, url)
-             or from_github((new.get('url') or [url])[0], version) or Notes())
-    notes.version = version
-    if prev_commit:
+    with ThreadPoolExecutor(2) as pool:
+        previous = pool.submit(srcinfo, base, prev_commit) if prev_commit else None
+        new = srcinfo(base, commit)
+        version = version_of(new)
+        notes = (from_metainfo(metainfo_path, version) or from_github((new.get('url') or [url])[0], version)
+                 or from_flathub(name, version, url) or Notes())
+        notes.version = version
         try:
-            old = srcinfo(base, prev_commit)
+            old = previous.result() if previous else None
         except (OSError, RuntimeError):
             old = None
-        if old:
-            if version_of(old) != version:
-                notes.build_changes.append(f'версия {version_of(old)} → {version}')
-            notes.build_changes += compare_builds(old, new)
+    if old:
+        if version_of(old) != version:
+            notes.build_changes.append(f'версия {version_of(old)} → {version}')
+        notes.build_changes += compare_builds(old, new)
     return notes
