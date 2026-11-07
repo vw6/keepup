@@ -41,9 +41,18 @@ def pill(text, kind='info'):
 
 
 def row(title, subtitle='', activatable=False):
-    r = Adw.ActionRow(title=title, subtitle=subtitle, activatable=activatable)
-    r.set_use_markup(False)
+    # Разметку выключаем до текста: иначе GTK пробует разобрать «<admin@cachyos.org>» как тег и ругается.
+    r = Adw.ActionRow(activatable=activatable, use_markup=False)
+    r.set_title(title)
+    r.set_subtitle(subtitle)
     r.set_subtitle_lines(3)
+    return r
+
+
+def expander(title, subtitle='', expanded=False):
+    r = Adw.ExpanderRow(use_markup=False, expanded=expanded)
+    r.set_title(title)
+    r.set_subtitle(subtitle)
     return r
 
 
@@ -254,7 +263,9 @@ class Window(Adw.ApplicationWindow):
             self.holders[key].set_child(build())
 
     def toast(self, text):
-        self.toasts.add_toast(Adw.Toast(title=text, timeout=5))
+        toast = Adw.Toast(timeout=5, use_markup=False)
+        toast.set_title(text)
+        self.toasts.add_toast(toast)
 
     # Обзор
 
@@ -337,8 +348,7 @@ class Window(Adw.ApplicationWindow):
             group.add(row('Новостей нет', 'лента не загрузилась и сохранённой копии нет'))
             return page
         for item in self.snap.news[:30]:
-            exp = Adw.ExpanderRow(title=item.title, subtitle=_date(item.date))
-            exp.set_use_markup(False)
+            exp = expander(item.title, _date(item.date))
             if item.touches:
                 exp.add_suffix(pill('касается: ' + ', '.join(item.touches[:3]), 'warn'))
             body = Gtk.Label(label=item.text, wrap=True, xalign=0, selectable=True,
@@ -872,8 +882,7 @@ class Window(Adw.ApplicationWindow):
         if notes:
             whats = Adw.PreferencesGroup(title='Что нового' if newer else f'Версия {notes[0].version}')
             for rel in notes[:5]:
-                exp = Adw.ExpanderRow(title=f'Версия {rel.version}', subtitle=_release_date(rel.date), expanded=rel is notes[0])
-                exp.set_use_markup(False)
+                exp = expander(f'Версия {rel.version}', _release_date(rel.date), expanded=rel is notes[0])
                 body = Gtk.Label(label=rel.text or 'Описания изменений нет.', wrap=True, xalign=0, selectable=True,
                                  margin_top=10, margin_bottom=10, margin_start=12, margin_end=12)
                 body.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
@@ -991,8 +1000,7 @@ class Window(Adw.ApplicationWindow):
         if not found:
             group.add(row('Ядра не найдены', 'не удалось сопоставить пакеты ядер с /usr/lib/modules'))
         for k in found:
-            exp = Adw.ExpanderRow(title=k.name, subtitle=f'установлено {k.version}' + (f' · запущено {release}' if k.name == running_base else ''))
-            exp.set_use_markup(False)
+            exp = expander(k.name, f'установлено {k.version}' + (f' · запущено {release}' if k.name == running_base else ''))
             exp.add_prefix(_pkg_icon('computer-symbolic', 32))
             if k.name == default:
                 exp.add_suffix(pill('основное', 'info'))
@@ -1083,7 +1091,7 @@ class Window(Adw.ApplicationWindow):
             for e in entries:
                 counts[e.action] += 1
             summary = ', '.join(f'{verbs[a]}: {n}' for a, n in counts.items())
-            exp = Adw.ExpanderRow(title=day.strftime('%d.%m.%Y'), subtitle=summary)
+            exp = expander(day.strftime('%d.%m.%Y'), summary)
             for e in entries[:200]:
                 exp.add_row(row(e.name, f'{e.when.strftime("%H:%M")} · {verbs[e.action]} · {e.versions}'))
             if len(entries) > 200:
