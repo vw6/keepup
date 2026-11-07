@@ -22,7 +22,12 @@ PAGES = [
     ('history', 'История', 'document-open-recent-symbolic'),
 ]
 ROLLBACK_ROWS = 80
-HISTORY_DAYS = 30
+# Вид изменения в журнале pacman: заголовок группы на странице дня и слово для итога в списке дней.
+HISTORY_GROUPS = {'upgraded': ('Обновлены', 'обновлено'), 'installed': ('Установлены', 'установлено'),
+                  'downgraded': ('Откачены', 'откачено'), 'reinstalled': ('Переустановлены', 'переустановлено'),
+                  'removed': ('Удалены', 'удалено')}
+MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+HISTORY_DAYS = 90
 
 CSS = b"""
 .pill { border-radius: 999px; padding: 1px 9px; font-size: 0.85em; }
@@ -1238,25 +1243,57 @@ class Window(Adw.ApplicationWindow):
 
     def build_history(self):
         page = Adw.PreferencesPage()
-        group = Adw.PreferencesGroup(title='Что менялось', description=f'Журнал pacman за последние {HISTORY_DAYS} дней изменений.')
+        group = Adw.PreferencesGroup(title='Что менялось', description='Журнал pacman по дням. Выберите день: что обновлялось, '
+                                                                       'ставилось и удалялось, с версиями и временем.')
         page.add(group)
         days = defaultdict(list)
         for e in self.snap.log:
             days[e.when.date()].append(e)
-        verbs = {'upgraded': 'обновлён', 'downgraded': 'откачен', 'installed': 'установлен', 'removed': 'удалён', 'reinstalled': 'переустановлен'}
         for day in sorted(days, reverse=True)[:HISTORY_DAYS]:
             entries = days[day]
             counts = defaultdict(int)
             for e in entries:
                 counts[e.action] += 1
-            summary = ', '.join(f'{verbs[a]}: {n}' for a, n in counts.items())
-            exp = expander(day.strftime('%d.%m.%Y'), summary)
-            for e in entries[:200]:
-                exp.add_row(row(e.name, f'{e.when.strftime("%H:%M")} · {verbs[e.action]} · {e.versions}'))
-            if len(entries) > 200:
-                exp.add_row(row(f'и ещё {len(entries) - 200}'))
-            group.add(exp)
+            summary = ' · '.join(f'{HISTORY_GROUPS[a][1]}: {n}' for a, n in sorted(counts.items(), key=lambda kv: -kv[1]))
+            r = row(_long_date(day), summary, activatable=True)
+            r.add_prefix(_pkg_icon('document-open-recent-symbolic', 32))
+            r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+            # Поиск по истории находит день и по именам пакетов внутри него.
+            r.search_text = ' '.join(e.name for e in entries)
+            r.connect('activated', lambda _r, d=day, es=entries: self.show_history_day(d, es))
+            group.add(r)
+        if not days:
+            group.add(row('Журнал pacman пуст или недоступен'))
         return page
+
+    def show_history_day(self, day, entries):
+        """День из журнала pacman страницей: изменения по видам, у каждого пакета время и версии, щелчок открывает карточку."""
+        page = WidePage()
+        nav_page = self.detail_page(_long_date(day), page)
+        by_action = defaultdict(list)
+        for e in entries:
+            by_action[e.action].append(e)
+        for action in ('upgraded', 'installed', 'downgraded', 'reinstalled', 'removed'):
+            items = by_action.get(action)
+            if not items:
+                continue
+            group = Adw.PreferencesGroup(title=f'{HISTORY_GROUPS[action][0]}: {len(items)}')
+            for e in sorted(items, key=lambda e: e.name):
+                versions = e.versions.replace(' -> ', '  →  ')
+                installed = e.name in self.snap.packages
+                r = row(e.name, f'{e.when.strftime("%H:%M")} · {versions}', activatable=installed)
+                r.add_prefix(_pkg_icon(self.icon_for(e.name), 32))
+                if installed:
+                    now = self.snap.packages[e.name].version
+                    if action != 'removed' and not versions.endswith(now):
+                        r.set_subtitle(f'{r.get_subtitle()} · сейчас {now}')
+                    r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+                    r.connect('activated', lambda _r, n=e.name: self.show_aur(n) if n in self.snap.foreign else self.show_pkg(n))
+                elif action != 'removed':
+                    r.set_subtitle(f'{r.get_subtitle()} · сейчас не установлен')
+                group.add(r)
+            page.add(group)
+        self.push_page(nav_page)
 
     # Действия
 
@@ -1640,7 +1677,7 @@ def pacman_files(name):
 
 
 def _row_text(r):
-    return ((r.get_title() or '') + ' ' + (r.get_subtitle() or '')).lower()
+    return ((r.get_title() or '') + ' ' + (r.get_subtitle() or '') + ' ' + getattr(r, 'search_text', '')).lower()
 
 
 def _children(widget):
@@ -1781,6 +1818,10 @@ def _release_date(value):
         from datetime import datetime
         return datetime.fromtimestamp(int(value)).strftime('%d.%m.%Y')
     return value
+
+
+def _long_date(day):
+    return f'{day.day} {MONTHS[day.month - 1]} {day.year}'
 
 
 def _note_group(title, subtitle):
