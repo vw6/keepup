@@ -534,7 +534,7 @@ class Window(Adw.ApplicationWindow):
         update = next((u for u in s.aur_updates if u.name == name), None)
         pkg = s.packages.get(name)
 
-        page = Adw.PreferencesPage()
+        page = WidePage()
         dialog = self.detail_page(name, page)
 
         head = Gtk.Box(spacing=18, margin_bottom=6)
@@ -662,8 +662,7 @@ class Window(Adw.ApplicationWindow):
     def detail_page(self, title, page):
         view = Adw.ToolbarView()
         view.add_top_bar(Adw.HeaderBar())
-        clamp = Adw.Clamp(maximum_size=980, child=page)
-        view.set_content(clamp)
+        view.set_content(page)
         return Adw.NavigationPage(title=title, child=view)
 
     def close_detail(self, parent):
@@ -676,7 +675,7 @@ class Window(Adw.ApplicationWindow):
         """Страница версии из правки AUR: примечания к выпуску, изменения сборки и кнопка сборки."""
         files = self.snap.foreign_files.get(name, [])
         local_url = aur.local_info(name).get('URL', '')
-        page = Adw.PreferencesPage()
+        page = WidePage()
         nav_page = self.detail_page(f'{name}: правка от {date}', page)
 
         head = Gtk.Box(spacing=18, margin_bottom=6)
@@ -837,7 +836,7 @@ class Window(Adw.ApplicationWindow):
 
     def show_app(self, app):
         info = self.snap.app_info.get(app.app_id) or appstream.Info(app.app_id, name=app.name)
-        page = Adw.PreferencesPage()
+        page = WidePage()
         dialog = self.detail_page(info.name or app.name, page)
 
         head = Gtk.Box(spacing=18, margin_bottom=6)
@@ -1114,7 +1113,7 @@ class Window(Adw.ApplicationWindow):
         meta = appstream.from_file(aur.metainfo_file(files)) if aur.metainfo_file(files) else None
         update = next((u for u in s.updates if u.name == name), None)
 
-        page = Adw.PreferencesPage()
+        page = WidePage()
         nav_page = self.detail_page(name, page)
         head = Gtk.Box(spacing=18, margin_bottom=6)
         head.append(_pkg_icon(self.icon_for(name, files), 96))
@@ -1283,7 +1282,7 @@ class Window(Adw.ApplicationWindow):
         s = self.snap
         pkg = s.packages[name]
         group_names = pacman.related(name, s.packages)
-        page = Adw.PreferencesPage()
+        page = WidePage()
         nav_page = self.detail_page(f'{name} {version}', page)
         head = Gtk.Box(spacing=18, margin_bottom=6)
         head.append(_pkg_icon(self.icon_for(name, files), 72))
@@ -1478,6 +1477,19 @@ class _VerKey:
 
 def pacman_files(name):
     return aur.files_of([name]).get(name, [])
+
+
+class WidePage(Gtk.ScrolledWindow):
+    """Страница карточки: прокрутка на всю ширину окна, а содержимое по центру шириной до 980 пикселей.
+    Adw.PreferencesPage держит колонку узкой, а обёрнутая в Adw.Clamp целиком уносила с собой полосу прокрутки и тень."""
+    def __init__(self):
+        super().__init__(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
+        self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=24, margin_top=24, margin_bottom=24,
+                           margin_start=12, margin_end=12)
+        self.set_child(Adw.Clamp(maximum_size=980, tightening_threshold=720, child=self.box))
+
+    def add(self, group):
+        self.box.append(group)
 
 
 def set_markup_or_text(label, markup, text):
