@@ -227,7 +227,7 @@ class InlineProgress(Gtk.Box):
 
 class DownloadRow(Gtk.Box):
     """Действие в меню загрузок: значок состояния, название, этап, полоска, своя консоль с полным выводом."""
-    def __init__(self, op, on_remove):
+    def __init__(self, op, on_remove, on_console):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=10, margin_bottom=10, margin_start=12, margin_end=12)
         self.op = op
         top = Gtk.Box(spacing=12)
@@ -242,35 +242,21 @@ class DownloadRow(Gtk.Box):
         text.append(title)
         text.append(self.stage)
         top.append(text)
-        self.console_button = Gtk.ToggleButton(icon_name='utilities-terminal-symbolic', tooltip_text='Консоль: весь вывод с начала',
-                                               valign=Gtk.Align.CENTER)
-        self.console_button.add_css_class('flat')
-        self.console_button.connect('toggled', self._toggle)
-        top.append(self.console_button)
         self.remove_button = Gtk.Button(icon_name='user-trash-symbolic', tooltip_text='Убрать из списка', valign=Gtk.Align.CENTER,
                                         visible=False)
         self.remove_button.add_css_class('flat')
         self.remove_button.connect('clicked', lambda *_: on_remove(self))
         top.append(self.remove_button)
+        console_button = Gtk.Button(icon_name='utilities-terminal-symbolic', tooltip_text='Консоль: весь вывод с начала',
+                                    valign=Gtk.Align.CENTER)
+        console_button.add_css_class('flat')
+        console_button.connect('clicked', lambda *_: on_console(op))
+        top.append(console_button)
         self.append(top)
         self.bar = Gtk.ProgressBar()
         self.append(self.bar)
-        view = Gtk.TextView(buffer=op.buffer, editable=False, cursor_visible=False, monospace=True, wrap_mode=Gtk.WrapMode.WORD_CHAR,
-                            top_margin=8, bottom_margin=8, left_margin=8, right_margin=8)
-        self.scroll = Gtk.ScrolledWindow(child=view, min_content_height=220, max_content_height=220)
-        self.scroll.add_css_class('card')
-        self.console = Gtk.Revealer(child=self.scroll)
-        self.append(self.console)
         GLib.timeout_add(120, self._pulse)
         op.listen(self._show)
-
-    def _toggle(self, button):
-        self.console.set_reveal_child(button.get_active())
-        GLib.timeout_add(self.console.get_transition_duration() + 50, lambda: self._scroll_end() and False)
-
-    def _scroll_end(self):
-        adj = self.scroll.get_vadjustment()
-        adj.set_value(adj.get_upper())
 
     def _pulse(self):
         if not self.op.finished and self.op.overall.value <= 0:
@@ -278,8 +264,6 @@ class DownloadRow(Gtk.Box):
         return not self.op.finished
 
     def _show(self, op):
-        if self.console.get_reveal_child():
-            GLib.idle_add(lambda: self._scroll_end() and False)
         if op.finished:
             ok = op.code == 0
             icon = Gtk.Image(icon_name='object-select-symbolic' if ok else 'dialog-error-symbolic')
@@ -298,9 +282,10 @@ class DownloadRow(Gtk.Box):
 
 class DownloadsPage(Gtk.Stack):
     """Вкладка «Загрузки»: все действия этого запуска, новые сверху, у каждого этап, полоска и своя консоль."""
-    def __init__(self, on_change):
+    def __init__(self, on_change, on_console):
         super().__init__()
         self.on_change = on_change
+        self.on_console = on_console
         self.ops = []
         self.add_named(Adw.StatusPage(icon_name='folder-download-symbolic', title='Пока пусто',
                                       description='Здесь будут обновления, установки и удаления, запущенные в KeepUp.'), 'empty')
@@ -314,7 +299,7 @@ class DownloadsPage(Gtk.Stack):
 
     def add(self, op):
         self.ops.append(op)
-        self.list.prepend(DownloadRow(op, self._remove))
+        self.list.prepend(DownloadRow(op, self._remove, self.on_console))
         self.set_visible_child_name('list')
         op.listen(lambda _op: self.on_change())
 
@@ -452,7 +437,7 @@ class Window(Adw.ApplicationWindow):
         self.downloads_list.connect('row-selected', self.on_downloads_selected)
         # Повторный щелчок по уже выбранному пункту тоже открывает его, а не оставляет открытую карточку.
         self.downloads_list.connect('row-activated', self.on_downloads_selected)
-        self.downloads = DownloadsPage(lambda: self.downloads_entry.update(self.downloads))
+        self.downloads = DownloadsPage(lambda: self.downloads_entry.update(self.downloads), self.show_console)
         GLib.timeout_add(150, lambda: (self.downloads.running() and self.downloads_entry.update(self.downloads)) or True)
         side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         side.append(Gtk.ScrolledWindow(child=listbox, vexpand=True))
@@ -472,6 +457,38 @@ class Window(Adw.ApplicationWindow):
         self.content_title.set_title('Загрузки')
         self.content_page.set_title('Загрузки')
         self.split.set_show_content(True)
+
+    def show_console(self, op):
+        """Консоль действия страницей во всё окно: весь вывод с начала, дописывается вживую, сама едет вниз,
+        пока её не отмотали вверх."""
+        view = Gtk.TextView(buffer=op.buffer, editable=False, cursor_visible=False, monospace=True, wrap_mode=Gtk.WrapMode.WORD_CHAR,
+                            top_margin=16, bottom_margin=16, left_margin=18, right_margin=18)
+        scroll = Gtk.ScrolledWindow(child=view, vexpand=True)
+        scroll.add_css_class('view')
+        title = Adw.WindowTitle(title=op.title, subtitle='')
+        header = Adw.HeaderBar(title_widget=title)
+        copy = Gtk.Button(icon_name='edit-copy-symbolic', tooltip_text='Скопировать всё')
+        copy.connect('clicked', lambda *_: (self.get_clipboard().set(op.buffer.get_text(op.buffer.get_start_iter(),
+                                                                                       op.buffer.get_end_iter(), False)),
+                                            self.toast('Вывод скопирован')))
+        header.pack_end(copy)
+        toolbar = Adw.ToolbarView()
+        toolbar.add_top_bar(header)
+        toolbar.set_content(scroll)
+        self.page_counter = getattr(self, 'page_counter', 0) + 1
+        page = Adw.NavigationPage(title=f'Консоль: {op.title}', child=toolbar, tag=f'detail-{self.page_counter}')
+        follow = {'on': True}
+        adj = scroll.get_vadjustment()
+        # Следим за концом, только если пользователь сам не отмотал вверх.
+        adj.connect('value-changed', lambda a: follow.__setitem__('on', a.get_value() + a.get_page_size() >= a.get_upper() - 40))
+
+        def to_end(*_):
+            if follow['on']:
+                GLib.idle_add(lambda: adj.set_value(adj.get_upper()) or False)
+        op.buffer.connect('changed', to_end)
+        op.listen(lambda o: title.set_subtitle(o.result() if o.finished else o.state.stage + (f' · {o.state.detail}' if o.state.detail else '')))
+        page.connect('shown', lambda *_: GLib.timeout_add(60, lambda: adj.set_value(adj.get_upper()) or False))
+        self.push_page(page)
 
     def open_downloads(self):
         self.downloads_list.select_row(self.downloads_list.get_row_at_index(0))
@@ -1892,6 +1909,11 @@ class Window(Adw.ApplicationWindow):
         def done(code):
             if code == 0:
                 self.refresh()
+            elif code not in (126, 127):
+                toast = Adw.Toast(timeout=0, use_markup=False, button_label='Консоль')
+                toast.set_title(f'{title}: не получилось')
+                toast.connect('button-clicked', lambda *_: self.show_console(self.operation))
+                self.toasts.add_toast(toast)
         self.operation = Operation(title, cmd, done)
         self.downloads.add(self.operation)
         toast = Adw.Toast(timeout=4, use_markup=False, button_label='Показать')
