@@ -9,7 +9,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Adw, GLib, Gtk, Pango  # noqa: E402
 
-from . import aur, flatpak, news, ops, pacman  # noqa: E402
+from . import aur, flatpak, kernels, news, ops, pacman  # noqa: E402
 
 PAGES = [
     ('overview', 'Обзор', 'view-grid-symbolic'),
@@ -74,6 +74,8 @@ class Snapshot:
         self.aur_error = None
         self.flatpaks = []
         self.flatpak_error = None
+        self.repo_kernels = []
+        self.boot_order = []
 
     @classmethod
     def collect(cls):
@@ -91,6 +93,8 @@ class Snapshot:
             s.kernel = pacman.running_kernel()
             s.reboot = pacman.reboot_reasons(s.log, pacman.boot_time())
             s.foreign = aur.foreign()
+            s.repo_kernels = kernels.available(set(s.packages))
+            s.boot_order = kernels.boot_order()
             s.updates, s.updates_error = _result(repo)
             s.news, s.news_fresh = feed.result()
             if aur_upd:
@@ -144,7 +148,7 @@ class OperationDialog(Adw.Dialog):
 
 
 class Window(Adw.ApplicationWindow):
-    def __init__(self, app):
+    def __init__(self, app, page='overview'):
         super().__init__(application=app, title='Обновления', default_width=1040, default_height=720)
         provider = Gtk.CssProvider()
         provider.load_from_data(CSS)
@@ -180,7 +184,7 @@ class Window(Adw.ApplicationWindow):
 
         self.toasts.set_child(split)
         self.set_content(self.toasts)
-        self.sidebar_list.select_row(self.sidebar_list.get_row_at_index(0))
+        self.open_page(page if page in dict((k, t) for k, t, _ in PAGES) else 'overview')
         self.show_loading()
         self.refresh()
 
@@ -571,32 +575,91 @@ class Window(Adw.ApplicationWindow):
         s = self.snap
         page = Adw.PreferencesPage()
         release, running_base = s.kernel
-        group = Adw.PreferencesGroup(title='Установленные ядра',
-                                     description='Держите хотя бы одно запасное ядро: если новое не загрузится, его выбирают в загрузчике.')
-        page.add(group)
         found = pacman.kernels(s.packages)
+        names = [k.name for k in found]
+        default = kernels.default_kernel(s.boot_order, names)
+        repo = {k.name: k for k in s.repo_kernels}
+
+        group = Adw.PreferencesGroup(title='Установленные ядра',
+                                     description='Основное загружается первым; остальные выбираются в меню загрузчика. '
+                                                 'Держите хотя бы одно запасное.')
+        page.add(group)
         if not found:
             group.add(row('Ядра не найдены', 'не удалось сопоставить пакеты ядер с /usr/lib/modules'))
         for k in found:
             exp = Adw.ExpanderRow(title=k.name, subtitle=f'установлено {k.version}' + (f' · запущено {release}' if k.name == running_base else ''))
             exp.set_use_markup(False)
+            if k.name == default:
+                exp.add_suffix(pill('основное', 'info'))
             if k.name == running_base:
                 exp.add_suffix(pill('запущено', 'ok'))
             pending = [u for u in s.updates if u.name == k.name]
             if pending:
                 exp.add_suffix(pill(f'есть {pending[0].new}', 'info'))
-            if k.cached:
-                for c in _unique_versions(k.cached):
-                    newer = pacman.vercmp(c, k.version) > 0
-                    r = row(f'{"Поставить" if newer else "Откатить на"} {c}',
-                            ('новее установленной; ' if newer else '') + 'вместе с заголовками и модулями этого ядра', activatable=True)
-                    r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
-                    r.connect('activated', lambda _r, name=k.name: self.ask_rollback(name))
-                    exp.add_row(r)
-            else:
+            missing = [m for m in (repo[k.name].modules if k.name in repo else []) if m not in s.packages]
+            if missing:
+                exp.add_suffix(pill('нет модулей', 'warn'))
+                r = row('Поставить недостающие модули', f'{", ".join(missing)}: стоят у другого ядра, а у этого нет; без r8125 может не быть сети',
+                        activatable=True)
+                r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+                r.connect('activated', lambda _r, ms=missing, n=k.name: self.ask_install(n, ms, modules_only=True))
+                exp.add_row(r)
+            if k.name != default:
+                r = row('Сделать основным', 'это ядро будет загружаться первым; меню загрузчика пересоберётся', activatable=True)
+                r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+                r.connect('activated', lambda _r, n=k.name: self.ask_default(n))
+                exp.add_row(r)
+            for c in _unique_versions(k.cached):
+                newer = pacman.vercmp(c, k.version) > 0
+                r = row(f'{"Поставить" if newer else "Откатить на"} {c}',
+                        ('новее установленной; ' if newer else '') + 'вместе с заголовками и модулями этого ядра', activatable=True)
+                r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+                r.connect('activated', lambda _r, name=k.name: self.ask_rollback(name))
+                exp.add_row(r)
+            if not k.cached:
                 exp.add_row(row('Прошлых версий в кэше нет'))
             group.add(exp)
+        if default is None and found:
+            group.add(row('Основное ядро не задано явно',
+                          f'BOOT_ORDER: {", ".join(s.boot_order) or "по умолчанию"}; первым идёт ядро, которое limine поставит первым по шаблону'))
+
+        more = Adw.PreferencesGroup(title='Доступные ядра',
+                                    description='Из подключённых репозиториев. Ставятся вместе с заголовками, модулями ваших устройств и полным обновлением системы.')
+        page.add(more)
+        for k in s.repo_kernels:
+            if k.installed:
+                continue
+            r = row(k.name, f'{k.version} · {k.repo}' + (f' · {k.description}' if k.description else ''), activatable=True)
+            r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+            r.connect('activated', lambda _r, kk=k: self.ask_install(kk.name, [kk.name, kk.name + '-headers', *kk.modules]))
+            more.add(r)
+        if not any(not k.installed for k in s.repo_kernels):
+            more.add(row('Других ядер в репозиториях нет'))
         return page
+
+    def ask_install(self, kernel, names, modules_only=False):
+        heading = f'Поставить модули для {kernel}?' if modules_only else f'Поставить ядро {kernel}?'
+        body = (f'Будут установлены: {", ".join(names)}.\n\nВместе с ними обновится вся система: '
+                f'так Arch требует при установке новых пакетов. Пункт в меню загрузчика появится сам.')
+        dialog = Adw.AlertDialog(heading=heading, body=body)
+        dialog.add_response('cancel', 'Отмена')
+        dialog.add_response('go', 'Установить')
+        dialog.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response('cancel')
+        dialog.connect('response', lambda _d, resp: resp == 'go' and self.run_op(f'Установка {kernel}', kernels.install_command(names)))
+        dialog.present(self)
+
+    def ask_default(self, kernel):
+        order = kernels.new_order(self.snap.boot_order, kernel)
+        dialog = Adw.AlertDialog(heading=f'Сделать {kernel} основным?',
+                                 body=f'В /etc/default/limine станет BOOT_ORDER="{", ".join(order)}", прежние настройки сохранятся копией. '
+                                      'Потом limine-update пересоберёт меню загрузки, это займёт около минуты.')
+        dialog.add_response('cancel', 'Отмена')
+        dialog.add_response('go', 'Сделать основным')
+        dialog.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response('cancel')
+        dialog.connect('response', lambda _d, resp: resp == 'go' and self.run_op(f'Основное ядро: {kernel}', kernels.set_default_command(kernel)))
+        dialog.present(self)
 
     # История
 

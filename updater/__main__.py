@@ -11,9 +11,12 @@ from .window import Window  # noqa: E402
 
 
 def main():
+    # --page ВКЛАДКА открывает окно сразу на ней: overview, news, packages, aur, flatpak, kernels, history.
+    args = sys.argv[1:]
+    page = args[args.index('--page') + 1] if '--page' in args[:-1] else 'overview'
     app = Adw.Application(application_id='ru.vw6.Updater')
-    app.connect('activate', lambda a: (a.get_active_window() or Window(a)).present())
-    return app.run(sys.argv)
+    app.connect('activate', lambda a: (a.get_active_window() or Window(a, page)).present())
+    return app.run(sys.argv[:1])
 
 
 if __name__ == '__main__':

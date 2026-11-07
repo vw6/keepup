@@ -37,3 +37,37 @@ class Aur(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class Kernels(unittest.TestCase):
+    SL = ('cachyos-znver4 linux-cachyos 7.3.0-5 [installed: 7.2.10-1]\ncachyos-znver4 linux-cachyos-headers 7.3.0-5\n'
+          'cachyos-znver4 linux-cachyos-r8125 7.3.0-5\ncachyos-znver4 linux-cachyos-lts 6.18.55-2 [installed]\n'
+          'cachyos-znver4 linux-cachyos-lts-headers 6.18.55-2\ncachyos-znver4 linux-cachyos-lts-r8125 6.18.55-2\n'
+          'cachyos-znver4 linux-cachyos-bore 7.2.10-1\ncachyos-znver4 linux-cachyos-bore-headers 7.2.10-1\n'
+          'core linux-firmware 20261101-1\ncore linux-api-headers 7.0-1\n')
+
+    def test_repo_kernels(self):
+        from updater import kernels
+        sync = kernels.parse_sync_list(self.SL)
+        self.assertEqual(kernels.repo_kernels(sync), ['linux-cachyos', 'linux-cachyos-bore', 'linux-cachyos-lts'])
+        self.assertTrue(sync['linux-cachyos'][2])
+
+    def test_modules(self):
+        from updater import kernels
+        installed = {'linux-cachyos', 'linux-cachyos-headers', 'linux-cachyos-r8125', 'linux-cachyos-lts', 'linux-cachyos-lts-headers'}
+        suffixes = kernels.module_suffixes(installed, ['linux-cachyos', 'linux-cachyos-lts'])
+        self.assertEqual(suffixes, ['r8125'])
+        sync = kernels.parse_sync_list(self.SL)
+        self.assertEqual(kernels.modules_for('linux-cachyos-lts', suffixes, sync), ['linux-cachyos-lts-r8125'])
+        self.assertEqual(kernels.modules_for('linux-cachyos-bore', suffixes, sync), [])
+
+    def test_boot_order(self):
+        from updater import kernels
+        order = kernels.parse_boot_order('ESP_PATH="/boot"\nBOOT_ORDER="*, *lts, *fallback, Snapshots"\n')
+        self.assertEqual(order, ['*', '*lts', '*fallback', 'Snapshots'])
+        self.assertIsNone(kernels.default_kernel(order, ['linux-cachyos', 'linux-cachyos-lts']))
+        self.assertEqual(kernels.default_kernel(order, ['linux-cachyos']), 'linux-cachyos')
+        new = kernels.new_order(order, 'linux-cachyos-lts')
+        self.assertEqual(new, ['linux-cachyos-lts', '*', '*lts', '*fallback', 'Snapshots'])
+        self.assertEqual(kernels.default_kernel(new, ['linux-cachyos', 'linux-cachyos-lts']), 'linux-cachyos-lts')
+        self.assertEqual(kernels.new_order(new, 'linux-cachyos'), ['linux-cachyos', '*', '*lts', '*fallback', 'Snapshots'])
