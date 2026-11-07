@@ -183,7 +183,10 @@ class Window(Adw.ApplicationWindow):
             self.holders[key] = holder
             self.stack.add_named(holder, key)
         content.set_content(self.stack)
-        self.content_page = Adw.NavigationPage(title=PAGES[0][1], child=content)
+        # Карточка приложения или пакета открывается как страница поверх вкладки, со стрелкой «назад» в заголовке.
+        self.nav = Adw.NavigationView()
+        self.nav.add(Adw.NavigationPage(title=PAGES[0][1], tag='root', child=content))
+        self.content_page = Adw.NavigationPage(title=PAGES[0][1], child=self.nav)
         split.set_content(self.content_page)
         self.split = split
 
@@ -219,6 +222,8 @@ class Window(Adw.ApplicationWindow):
     def on_page_selected(self, _box, r):
         if r is None:
             return
+        if hasattr(self, 'nav'):
+            self.nav.pop_to_tag('root')
         title = dict((k, t) for k, t, _ in PAGES)[r.page_key]
         self.stack.set_visible_child_name(r.page_key)
         self.content_title.set_title(title)
@@ -506,12 +511,8 @@ class Window(Adw.ApplicationWindow):
         update = next((u for u in s.aur_updates if u.name == name), None)
         pkg = s.packages.get(name)
 
-        dialog = Adw.Dialog(title=name, content_width=760, content_height=720)
-        view = Adw.ToolbarView()
-        view.add_top_bar(Adw.HeaderBar())
         page = Adw.PreferencesPage()
-        view.set_content(page)
-        dialog.set_child(view)
+        dialog = self.detail_page(name, page)
 
         head = Gtk.Box(spacing=18, margin_bottom=6)
         head.append(_pkg_icon(aur.desktop_icon(files), 96))
@@ -580,7 +581,7 @@ class Window(Adw.ApplicationWindow):
             site.connect('activated', lambda *_: Gtk.UriLauncher(uri=local['URL']).launch(self, None, None))
             details.add(site)
         page.add(details)
-        dialog.present(self)
+        self.nav.push(dialog)
 
         def show_rpc(result):
             aur_group.remove(aur_wait)
@@ -623,6 +624,19 @@ class Window(Adw.ApplicationWindow):
 
         background(lambda: aur.rpc_info([name]), show_rpc)
 
+    def detail_page(self, title, page):
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        clamp = Adw.Clamp(maximum_size=980, child=page)
+        view.set_content(clamp)
+        return Adw.NavigationPage(title=title, child=view)
+
+    def close_detail(self, parent):
+        # Окно сборок Flatpak это настоящий диалог: его закрываем, а страницу карточки снимаем со стека.
+        if isinstance(parent, Adw.Dialog):
+            parent.close()
+        self.nav.pop_to_tag('root')
+
     def confirm_aur_one(self, parent, update):
         ask = Adw.AlertDialog(heading=f'Обновить {update.name}?',
                               body=f'{update.old} → {update.new}. Пакет соберётся на этом компьютере без просмотра PKGBUILD; '
@@ -631,9 +645,9 @@ class Window(Adw.ApplicationWindow):
         ask.add_response('go', 'Собрать и установить')
         ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
         ask.set_default_response('cancel')
-        ask.connect('response', lambda _d, resp: resp == 'go' and (parent.close(), self.run_op(
+        ask.connect('response', lambda _d, resp: resp == 'go' and (self.close_detail(parent), self.run_op(
             f'Обновление {update.name}', aur.update_one_command(update.name))))
-        ask.present(parent)
+        ask.present(self)
 
     def confirm_pkg_remove(self, parent, name):
         group = Adw.PreferencesGroup()
@@ -646,9 +660,9 @@ class Window(Adw.ApplicationWindow):
         ask.add_response('go', 'Удалить')
         ask.set_response_appearance('go', Adw.ResponseAppearance.DESTRUCTIVE)
         ask.set_default_response('cancel')
-        ask.connect('response', lambda _d, resp: resp == 'go' and (parent.close(), self.run_op(
+        ask.connect('response', lambda _d, resp: resp == 'go' and (self.close_detail(parent), self.run_op(
             f'Удаление {name}', aur.remove_command(name, deps.get_active()))))
-        ask.present(parent)
+        ask.present(self)
 
     def confirm_aur(self):
         names = ', '.join(u.name for u in self.snap.aur_updates[:6])
@@ -706,12 +720,8 @@ class Window(Adw.ApplicationWindow):
 
     def show_app(self, app):
         info = self.snap.app_info.get(app.app_id) or appstream.Info(app.app_id, name=app.name)
-        dialog = Adw.Dialog(title=info.name or app.name, content_width=760, content_height=720)
-        view = Adw.ToolbarView()
-        view.add_top_bar(Adw.HeaderBar())
         page = Adw.PreferencesPage()
-        view.set_content(page)
-        dialog.set_child(view)
+        dialog = self.detail_page(info.name or app.name, page)
 
         head = Gtk.Box(spacing=18, margin_bottom=6)
         head.append(_icon(info, 96))
@@ -783,7 +793,7 @@ class Window(Adw.ApplicationWindow):
             site.connect('activated', lambda *_: Gtk.UriLauncher(uri=info.homepage).launch(self, None, None))
             details.add(site)
         page.add(details)
-        dialog.present(self)
+        self.nav.push(dialog)
 
     def confirm_app_update(self, parent, app):
         ask = Adw.AlertDialog(heading=f'Обновить {self.app_name(app)}?',
@@ -792,9 +802,9 @@ class Window(Adw.ApplicationWindow):
         ask.add_response('go', 'Обновить')
         ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
         ask.set_default_response('cancel')
-        ask.connect('response', lambda _d, resp: resp == 'go' and (parent.close(), self.run_op(
+        ask.connect('response', lambda _d, resp: resp == 'go' and (self.close_detail(parent), self.run_op(
             f'Обновление {self.app_name(app)}', flatpak.update_one_command(app), pacman_lock=False)))
-        ask.present(parent)
+        ask.present(self)
 
     def confirm_app_remove(self, parent, app):
         name = self.app_name(app)
@@ -812,9 +822,9 @@ class Window(Adw.ApplicationWindow):
         ask.add_response('go', 'Удалить')
         ask.set_response_appearance('go', Adw.ResponseAppearance.DESTRUCTIVE)
         ask.set_default_response('cancel')
-        ask.connect('response', lambda _d, resp: resp == 'go' and (parent.close(), self.run_op(
+        ask.connect('response', lambda _d, resp: resp == 'go' and (self.close_detail(parent), self.run_op(
             f'Удаление {name}', flatpak.uninstall_commands(app, data.get_active(), unused.get_active()), pacman_lock=False)))
-        ask.present(parent)
+        ask.present(self)
 
     def ask_flatpak(self, app):
         dialog = Adw.Dialog(title=app.name, content_width=560, content_height=520)
@@ -852,9 +862,9 @@ class Window(Adw.ApplicationWindow):
         ask.add_response('go', 'Поставить')
         ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
         ask.set_default_response('cancel')
-        ask.connect('response', lambda _d, resp: resp == 'go' and (parent.close(), self.run_op(
+        ask.connect('response', lambda _d, resp: resp == 'go' and (self.close_detail(parent), self.run_op(
             f'{app.name}: сборка {commit.commit[:12]}', flatpak.checkout_command(app, commit.commit), pacman_lock=False)))
-        ask.present(parent)
+        ask.present(self)
 
     # Ядра
 
@@ -1000,7 +1010,7 @@ class Window(Adw.ApplicationWindow):
 def _screenshots(shots):
     group = Adw.PreferencesGroup()
     carousel = Adw.Carousel(spacing=12, allow_scroll_wheel=False)
-    carousel.set_size_request(-1, 380)
+    carousel.set_size_request(-1, 440)
     for caption, url in shots[:8]:
         frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, hexpand=True)
         picture = Gtk.Picture(can_shrink=True, content_fit=Gtk.ContentFit.CONTAIN, vexpand=True)
