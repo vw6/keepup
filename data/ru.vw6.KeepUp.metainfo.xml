@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>ru.vw6.KeepUp</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>KeepUp</name>
+  <summary>Updates, versions and rollbacks for Arch, AUR and Flatpak</summary>
+  <summary xml:lang="ru">Обновления, версии и откаты пакетов Arch, AUR и Flatpak</summary>
+  <developer id="ru.vw6">
+    <name>vw6</name>
+  </developer>
+  <description>
+    <p>A GNOME-style window for keeping an Arch Linux or CachyOS system up to date.</p>
+    <ul>
+      <li>Pending updates from the repositories, AUR (paru) and Flatpak, with reboot hints</li>
+      <li>Arch Linux news with a mark when a news item concerns your updates, machine translation and an offline archive</li>
+      <li>Any previous version of a package from the pacman cache, the Arch Linux Archive or an AUR commit, with release notes</li>
+      <li>Kernels: install, missing module packages, choosing the default kernel in Limine</li>
+      <li>History of pacman changes by day</li>
+    </ul>
+    <p xml:lang="ru">Окно в стиле GNOME, чтобы держать Arch Linux или CachyOS в актуальном состоянии.</p>
+    <ul>
+      <li xml:lang="ru">Обновления из репозиториев, AUR (paru) и Flatpak, с подсказкой о перезагрузке</li>
+      <li xml:lang="ru">Новости Arch с пометкой, если новость касается ваших обновлений, машинным переводом и архивом без сети</li>
+      <li xml:lang="ru">Любая прошлая версия пакета из кэша pacman, архива Arch или правки AUR, с примечаниями к выпуску</li>
+      <li xml:lang="ru">Ядра: установка, недостающие модули, выбор основного ядра в Limine</li>
+      <li xml:lang="ru">История изменений pacman по дням</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">ru.vw6.KeepUp.desktop</launchable>
+  <url type="homepage">https://github.com/vw6/keepup</url>
+  <url type="bugtracker">https://github.com/vw6/keepup/issues</url>
+  <categories>
+    <category>System</category>
+    <category>PackageManager</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-11-08">
+      <description>
+        <p>First release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

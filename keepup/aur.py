@@ -9,6 +9,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 
 from .pacman import Update, parse_checkupdates
+from . import USER_AGENT, cache_dir
 
 PARU_CLONE = os.path.expanduser('~/.cache/paru/clone')
 
@@ -54,7 +55,7 @@ def rpc_info(names, timeout=20):
     if not names:
         return {}
     query = urllib.parse.urlencode([('arg[]', n) for n in names])
-    req = urllib.request.Request(f'{AUR_RPC}?{query}', headers={'User-Agent': 'vw6-updater/0.1'})
+    req = urllib.request.Request(f'{AUR_RPC}?{query}', headers={'User-Agent': USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         data = json.load(resp)
     return {r['Name']: r for r in data.get('results', [])}
@@ -120,7 +121,7 @@ def parse_feed(text):
 
 
 def pkgbuild_log(name, timeout=20):
-    req = urllib.request.Request(AUR_FEED.format(urllib.parse.quote(name)), headers={'User-Agent': 'vw6-updater/0.1'})
+    req = urllib.request.Request(AUR_FEED.format(urllib.parse.quote(name)), headers={'User-Agent': USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return parse_feed(resp.read().decode('utf-8', errors='replace'))
 
@@ -137,7 +138,7 @@ def remove_command(name, deps=True):
 # Сборка любой прошлой версии: PKGBUILD берётся из git-хранилища пакета в AUR на нужной правке.
 
 AUR_GIT = 'https://aur.archlinux.org/{}.git'
-WORK = os.path.join(os.environ.get('XDG_CACHE_HOME', os.path.expanduser('~/.cache')), 'vw6-updater', 'aur')
+WORK = cache_dir('aur')
 COMMIT_ID = re.compile(r'[?&]id=([0-9a-f]{7,40})')
 
 

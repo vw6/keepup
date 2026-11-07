@@ -6,9 +6,10 @@ import re
 import shutil
 import subprocess
 import threading
+from . import cache_dir, config_dir
 
-CACHE = os.path.join(os.environ.get('XDG_CACHE_HOME', os.path.expanduser('~/.cache')), 'vw6-updater', 'translations.json')
-SETTINGS = os.path.join(os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config')), 'vw6-updater', 'settings.json')
+CACHE = cache_dir('translations.json')
+SETTINGS = config_dir('settings.json')
 # Что переводчик испортил бы: код в обратных кавычках, строки-команды, адреса и «технические» слова.
 # Метка вида ZQX0Q проходит перевод нетронутой.
 PROTECT = re.compile(

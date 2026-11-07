@@ -7,7 +7,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
-from . import appstream
+from . import USER_AGENT, appstream
 
 SRCINFO = 'https://aur.archlinux.org/cgit/aur.git/plain/.SRCINFO?h={}&id={}'
 GITHUB = re.compile(r'^https?://github\.com/([^/]+)/([^/#?]+)')
@@ -25,7 +25,7 @@ class Notes:
 
 
 def _get(url, timeout=20, accept=None):
-    headers = {'User-Agent': 'vw6-updater/0.1'}
+    headers = {'User-Agent': USER_AGENT}
     if accept:
         headers['Accept'] = accept
     with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout) as resp:

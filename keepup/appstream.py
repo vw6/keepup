@@ -5,9 +5,10 @@ import re
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
+from . import USER_AGENT, cache_dir
 
 LANG_ATTR = '{http://www.w3.org/XML/1998/namespace}lang'
-SHOTS = os.path.join(os.environ.get('XDG_CACHE_HOME', os.path.expanduser('~/.cache')), 'vw6-updater', 'shots')
+SHOTS = cache_dir('shots')
 
 
 @dataclass
@@ -145,7 +146,7 @@ def screenshot(url, timeout=20):
     if os.path.exists(path):
         with open(path, 'rb') as f:
             return f.read()
-    req = urllib.request.Request(url, headers={'User-Agent': 'vw6-updater/0.1'})
+    req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         data = resp.read()
     with open(path, 'wb') as f:

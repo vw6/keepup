@@ -6,6 +6,7 @@ import urllib.request
 from dataclasses import dataclass
 
 from .pacman import PKG_EXT, parse_cache_name, vercmp
+from . import USER_AGENT
 
 ARCHIVE = 'https://archive.archlinux.org/packages/{}/{}/'
 GITLAB = 'https://gitlab.archlinux.org/api/v4/projects/{}/repository/commits?per_page={}'
@@ -22,7 +23,7 @@ class ArchivedVersion:
 
 
 def _get(url, timeout=20):
-    req = urllib.request.Request(url, headers={'User-Agent': 'vw6-updater/0.1'})
+    req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read().decode('utf-8', errors='replace')
 

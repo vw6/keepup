@@ -1,0 +1,3 @@
+#!/bin/sh
+# Запуск установленной программы: модули лежат в /usr/lib/keepup.
+PYTHONPATH="/usr/lib/keepup${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m keepup "$@"

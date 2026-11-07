@@ -6,8 +6,9 @@ import gi
 
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Adw, Gio  # noqa: E402
+from gi.repository import Adw, Gio, Gtk  # noqa: E402
 
+from . import APP_ID  # noqa: E402
 from .window import Window  # noqa: E402
 
 
@@ -15,9 +16,10 @@ def main():
     # --page ВКЛАДКА открывает окно сразу на ней: overview, news, packages, aur, flatpak, kernels, history.
     args = sys.argv[1:]
     page = args[args.index('--page') + 1] if '--page' in args[:-1] else 'overview'
-    # UPDATER_SEPARATE=1 запускает отдельный экземпляр, не трогая уже открытое окно (для проверок).
-    flags = Gio.ApplicationFlags.NON_UNIQUE if os.environ.get('UPDATER_SEPARATE') == '1' else Gio.ApplicationFlags.DEFAULT_FLAGS
-    app = Adw.Application(application_id='ru.vw6.Updater', flags=flags)
+    # KEEPUP_SEPARATE=1 запускает отдельный экземпляр, не трогая уже открытое окно (для проверок).
+    flags = Gio.ApplicationFlags.NON_UNIQUE if os.environ.get('KEEPUP_SEPARATE') == '1' else Gio.ApplicationFlags.DEFAULT_FLAGS
+    app = Adw.Application(application_id=APP_ID, flags=flags)
+    Gtk.Window.set_default_icon_name(APP_ID)
     app.connect('activate', lambda a: (a.get_active_window() or Window(a, page)).present())
     return app.run(sys.argv[:1])
 

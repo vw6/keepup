@@ -10,7 +10,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Adw, Gdk, GLib, GObject, Gtk, Pango  # noqa: E402
 
-from . import appstream, archive, aur, flatpak, kernels, news, notes, ops, pacman, translate  # noqa: E402
+from . import NAME, appstream, archive, aur, flatpak, kernels, news, notes, ops, pacman, translate  # noqa: E402
 
 PAGES = [
     ('overview', 'Обзор', 'view-grid-symbolic'),
@@ -186,7 +186,7 @@ class OperationDialog(Adw.Dialog):
 
 class Window(Adw.ApplicationWindow):
     def __init__(self, app, page='overview'):
-        super().__init__(application=app, title='Обновления', default_width=1040, default_height=720)
+        super().__init__(application=app, title=NAME, default_width=1040, default_height=720)
         provider = Gtk.CssProvider()
         provider.load_from_data(CSS)
         Gtk.StyleContext.add_provider_for_display(self.get_display(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -196,7 +196,7 @@ class Window(Adw.ApplicationWindow):
         self.toasts = Adw.ToastOverlay()
 
         split = Adw.NavigationSplitView()
-        split.set_sidebar(Adw.NavigationPage(title='Обновления', child=self._sidebar()))
+        split.set_sidebar(Adw.NavigationPage(title=NAME, child=self._sidebar()))
         self.content_title = Adw.WindowTitle(title=PAGES[0][1])
         content = Adw.ToolbarView()
         header = Adw.HeaderBar(title_widget=self.content_title)

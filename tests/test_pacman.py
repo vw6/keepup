@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from updater import news, pacman
+from keepup import news, pacman
 
 
 class Versions(unittest.TestCase):

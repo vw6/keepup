@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=KeepUp
+GenericName=System Updates
+GenericName[ru]=Обновления системы
+Comment=Updates, versions and rollbacks for Arch, AUR and Flatpak
+Comment[ru]=Обновления, версии и откаты пакетов Arch, AUR и Flatpak
+Exec=keepup
+Icon=ru.vw6.KeepUp
+Terminal=false
+StartupNotify=true
+Categories=GTK;GNOME;System;PackageManager;
+Keywords=update;upgrade;pacman;aur;paru;flatpak;kernel;rollback;downgrade;обновление;пакеты;ядро;откат;

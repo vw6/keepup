@@ -10,10 +10,11 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime
 from email.utils import parsedate_to_datetime
+from . import USER_AGENT, cache_dir, data_dir
 
 FEED = 'https://archlinux.org/feeds/news/'
-CACHE = os.path.join(os.environ.get('XDG_CACHE_HOME', os.path.expanduser('~/.cache')), 'vw6-updater', 'news.xml')
-ARCHIVE = os.path.join(os.environ.get('XDG_DATA_HOME', os.path.expanduser('~/.local/share')), 'vw6-updater', 'news')
+CACHE = cache_dir('news.xml')
+ARCHIVE = data_dir('news')
 FRESH = 30 * 60   # чаще раза в полчаса за лентой не ходим: новости Arch выходят раз в несколько недель
 TAG = re.compile(r'<[^>]+>')
 
@@ -62,7 +63,7 @@ def fetch(timeout=15, max_age=FRESH):
         pass
     if not fresh:
         try:
-            req = urllib.request.Request(FEED, headers={'User-Agent': 'vw6-updater/0.1'})
+            req = urllib.request.Request(FEED, headers={'User-Agent': USER_AGENT})
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = resp.read().decode('utf-8')
             os.makedirs(os.path.dirname(CACHE), exist_ok=True)

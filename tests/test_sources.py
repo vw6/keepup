@@ -1,6 +1,6 @@
 import unittest
 
-from updater import flatpak, pacman
+from keepup import flatpak, pacman
 
 
 class Flatpak(unittest.TestCase):
@@ -47,13 +47,13 @@ class Kernels(unittest.TestCase):
           'core linux-firmware 20261101-1\ncore linux-api-headers 7.0-1\n')
 
     def test_repo_kernels(self):
-        from updater import kernels
+        from keepup import kernels
         sync = kernels.parse_sync_list(self.SL)
         self.assertEqual(kernels.repo_kernels(sync), ['linux-cachyos', 'linux-cachyos-bore', 'linux-cachyos-lts'])
         self.assertTrue(sync['linux-cachyos'][2])
 
     def test_modules(self):
-        from updater import kernels
+        from keepup import kernels
         installed = {'linux-cachyos', 'linux-cachyos-headers', 'linux-cachyos-r8125', 'linux-cachyos-lts', 'linux-cachyos-lts-headers'}
         suffixes = kernels.module_suffixes(installed, ['linux-cachyos', 'linux-cachyos-lts'])
         self.assertEqual(suffixes, ['r8125'])
@@ -62,7 +62,7 @@ class Kernels(unittest.TestCase):
         self.assertEqual(kernels.modules_for('linux-cachyos-bore', suffixes, sync), [])
 
     def test_boot_order(self):
-        from updater import kernels
+        from keepup import kernels
         order = kernels.parse_boot_order('ESP_PATH="/boot"\nBOOT_ORDER="*, *lts, *fallback, Snapshots"\n')
         self.assertEqual(order, ['*', '*lts', '*fallback', 'Snapshots'])
         self.assertIsNone(kernels.default_kernel(order, ['linux-cachyos', 'linux-cachyos-lts']))
@@ -83,7 +83,7 @@ class AppStream(unittest.TestCase):
 
     def test_component(self):
         import xml.etree.ElementTree as ET
-        from updater import appstream
+        from keepup import appstream
         info = appstream.parse_component(ET.fromstring(self.XML), 'ru')
         self.assertEqual((info.name, info.summary), ('Прил', 'Does'))
         self.assertEqual(info.description, 'Раз\n\n• б')
@@ -105,26 +105,26 @@ class Uninstall(unittest.TestCase):
 
 class AurCard(unittest.TestCase):
     def test_qi(self):
-        from updater import aur
+        from keepup import aur
         f = aur.parse_qi('Name            : google-chrome\nOptional Deps   : pipewire: WebRTC\n                  kdialog: dialogs\nInstalled Size  : 441.65 MiB\n')
         self.assertEqual(f['Installed Size'], '441.65 MiB')
         self.assertEqual(f['Optional Deps'], 'pipewire: WebRTC\nkdialog: dialogs')
 
     def test_feed(self):
-        from updater import aur
+        from keepup import aur
         feed = ("<feed xmlns='http://www.w3.org/2005/Atom'><entry><title>upgpkg: x 2-1</title><updated>2026-11-03T23:07:52Z</updated>"
                 "<link rel='alternate' href='http://aur/commit/?id=1'/><content type='text'>\nupstream release\n</content></entry></feed>")
         self.assertEqual(aur.parse_feed(feed), [('upgpkg: x 2-1', '2026-11-03', 'upstream release', 'http://aur/commit/?id=1')])
 
     def test_commands(self):
-        from updater import aur
+        from keepup import aur
         self.assertEqual(aur.remove_command('x'), ['pkexec', 'pacman', '-Rns', '--noconfirm', 'x'])
         self.assertEqual(aur.remove_command('x', deps=False)[2], '-Rn')
 
 
 class AurBuild(unittest.TestCase):
     def test_commit_and_commands(self):
-        from updater import aur
+        from keepup import aur
         self.assertEqual(aur.commit_of('http://aur.archlinux.org/cgit/aur.git/commit/?id=a3cd9ff99d3a&h=google-chrome'), 'a3cd9ff99d3a')
         self.assertIsNone(aur.commit_of('https://aur.archlinux.org/packages/x'))
         cmds = aur.build_commands('x-bin', 'abc123', {'x-bin'})
@@ -135,7 +135,7 @@ class AurBuild(unittest.TestCase):
 
 class ReleaseNotes(unittest.TestCase):
     def test_srcinfo_and_changes(self):
-        from updater import notes
+        from keepup import notes
         old = notes.parse_srcinfo('pkgbase = x\n\tpkgver = 8.0.4\n\tpkgrel = 1\n\tdepends = gtk3\n\tdepends = libxss\n')
         new = notes.parse_srcinfo('pkgbase = x\n\tpkgver = 8.1.0\n\tpkgrel = 1\n\tdepends = gtk3\n\tdepends = libxtst\n\tepoch = 1\n')
         self.assertEqual(notes.version_of(new), '1:8.1.0-1')
@@ -149,7 +149,7 @@ class Markdown(unittest.TestCase):
         gi.require_version('Gtk', '4.0')
         gi.require_version('Adw', '1')
         from gi.repository import Pango
-        from updater.window import markdown_markup
+        from keepup.window import markdown_markup
         for text in ('- ***Android 7 and 8 unavailable***', '**a *b* c**', '## H & <x>', '`code` and *i*'):
             Pango.parse_markup(markdown_markup(text), -1, '\0')
 
@@ -178,7 +178,7 @@ class Search(unittest.TestCase):
         from gi.repository import Adw, Gtk
         if not Gtk.init_check():
             self.skipTest('нет дисплея')
-        from updater.window import WidePage, _filter_widget, expander, row
+        from keepup.window import WidePage, _filter_widget, expander, row
         page = WidePage()
         updates = Adw.PreferencesGroup(title='Обновления')
         tg, mesa = row('telegram-desktop', '7.3.3 → 7.4.1'), row('mesa', '26.2.5 → 26.2.6')
@@ -207,7 +207,7 @@ class Search(unittest.TestCase):
 
 class Translate(unittest.TestCase):
     def test_protect(self):
-        from updater import translate
+        from keepup import translate
         names = {'php-legacy', 'ca-certificates-mozilla'}
         text = 'Update to php-legacy ≥ 8.3.36 and/or re-enroll the man-in-the-middle `pacman -Syu` https://a.b/c\n# mkinitcpio -P'
         masked, kept = translate.protect(text, names)
@@ -222,7 +222,7 @@ class NewsArchive(unittest.TestCase):
     def test_roundtrip_keeps_translation(self):
         import tempfile
         from datetime import datetime, timezone
-        from updater import news
+        from keepup import news
         with tempfile.TemporaryDirectory() as d:
             old = news.ARCHIVE
             news.ARCHIVE = d
