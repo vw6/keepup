@@ -395,7 +395,8 @@ class Window(Adw.ApplicationWindow):
             switch.connect('notify::active', self.on_news_translate)
             options.add(switch)
             page.add(options)
-        desc = None if self.snap.news_fresh else 'Сеть недоступна: показана последняя сохранённая лента.'
+        desc = ('Сохранены все новости, которые программа видела, вместе с переводами; за свежей лентой она ходит не чаще '
+                'раза в полчаса.' if self.snap.news_fresh else 'Сеть недоступна: показаны сохранённые новости.')
         group = Adw.PreferencesGroup(title='Новости Arch Linux', description=desc)
         page.add(group)
         if not self.snap.news:
@@ -403,7 +404,7 @@ class Window(Adw.ApplicationWindow):
             return page
         self.news_rows = []
         for item in self.snap.news[:30]:
-            title = (translate.cached(item.title) if self.news_translate else None) or item.title
+            title = (item.title_ru or translate.cached(item.title) if self.news_translate else None) or item.title
             r = row(title, _date(item.date), activatable=True)
             if item.touches:
                 r.add_suffix(pill('касается: ' + ', '.join(item.touches[:3]), 'warn'))
@@ -418,22 +419,28 @@ class Window(Adw.ApplicationWindow):
         self.news_translate = switch.get_active()
         translate.save_setting('translate_news', self.news_translate)
         for item, r in getattr(self, 'news_rows', []):
-            r.set_title((translate.cached(item.title) if self.news_translate else None) or item.title)
+            r.set_title((item.title_ru or translate.cached(item.title) if self.news_translate else None) or item.title)
         self.translate_titles()
 
     def translate_titles(self):
         """Заголовки без готового перевода переводятся в фоне по одному и подменяются в списке по мере готовности."""
         if not self.news_translate:
             return
-        todo = [(item, r) for item, r in getattr(self, 'news_rows', []) if translate.cached(item.title) is None]
+        todo = [(item, r) for item, r in getattr(self, 'news_rows', []) if not item.title_ru and translate.cached(item.title) is None]
 
         def one(rest):
             if not rest or not self.news_translate:
                 return
             item, r = rest[0]
             background(lambda: translate.translate(item.title),
-                       lambda result: (not isinstance(result, Exception) and self.news_translate and r.set_title(result), one(rest[1:])))
+                       lambda result: (not isinstance(result, Exception) and self.keep_title(item, result) and self.news_translate
+                                       and r.set_title(result), one(rest[1:])))
         one(todo)
+
+    def keep_title(self, item, title_ru):
+        item.title_ru = title_ru
+        news.save(item)
+        return True
 
     def show_news(self, item):
         """Новость страницей во всё окно: перевод или оригинал, кого из пакетов касается, ссылка на сайт."""
@@ -487,6 +494,11 @@ class Window(Adw.ApplicationWindow):
                 body.set_label(item.text)
                 body_group.set_description(None)
                 return
+            if item.title_ru and item.text_ru:
+                title.set_label(item.title_ru)
+                body.set_label(item.text_ru)
+                body_group.set_description('Машинный перевод; при сомнениях сверьтесь с оригиналом.')
+                return
             body_group.set_description('Переводим…')
 
             def done(result):
@@ -495,6 +507,8 @@ class Window(Adw.ApplicationWindow):
                     return
                 if not can or toggle.get_active_name() != 'ru':
                     return
+                item.title_ru, item.text_ru = result
+                news.save(item)
                 title.set_label(result[0])
                 body.set_label(result[1])
                 body_group.set_description('Машинный перевод; при сомнениях сверьтесь с оригиналом.')

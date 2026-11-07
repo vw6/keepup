@@ -1,7 +1,10 @@
 """Новости Arch Linux из ленты RSS и пометка тех, что касаются ожидающих обновлений."""
+import hashlib
 import html
+import json
 import os
 import re
+import time
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -10,6 +13,8 @@ from email.utils import parsedate_to_datetime
 
 FEED = 'https://archlinux.org/feeds/news/'
 CACHE = os.path.join(os.environ.get('XDG_CACHE_HOME', os.path.expanduser('~/.cache')), 'vw6-updater', 'news.xml')
+ARCHIVE = os.path.join(os.environ.get('XDG_DATA_HOME', os.path.expanduser('~/.local/share')), 'vw6-updater', 'news')
+FRESH = 30 * 60   # чаще раза в полчаса за лентой не ходим: новости Arch выходят раз в несколько недель
 TAG = re.compile(r'<[^>]+>')
 
 
@@ -20,6 +25,8 @@ class Item:
     date: datetime | None
     text: str
     touches: list[str] = field(default_factory=list)
+    title_ru: str = ''
+    text_ru: str = ''
 
 
 def _plain(fragment):
@@ -44,22 +51,82 @@ def parse(xml_text):
     return items
 
 
-def fetch(timeout=15):
-    """Свежая лента; при ошибке сети отдаётся последняя сохранённая, и это видно по второму значению."""
+def fetch(timeout=15, max_age=FRESH):
+    """Новости: архив всех увиденных статей плюс свежая лента. Лента скачивается, только если сохранённая старше max_age;
+    второе значение говорит, удалось ли её обновить (или она и так свежая)."""
+    fresh = False
     try:
-        req = urllib.request.Request(FEED, headers={'User-Agent': 'vw6-updater/0.1'})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = resp.read().decode('utf-8')
-        os.makedirs(os.path.dirname(CACHE), exist_ok=True)
-        with open(CACHE, 'w', encoding='utf-8') as f:
-            f.write(data)
-        return parse(data), True
+        if time.time() - os.path.getmtime(CACHE) < max_age:
+            fresh = True
     except OSError:
+        pass
+    if not fresh:
         try:
-            with open(CACHE, encoding='utf-8') as f:
-                return parse(f.read()), False
+            req = urllib.request.Request(FEED, headers={'User-Agent': 'vw6-updater/0.1'})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = resp.read().decode('utf-8')
+            os.makedirs(os.path.dirname(CACHE), exist_ok=True)
+            with open(CACHE, 'w', encoding='utf-8') as f:
+                f.write(data)
+            fresh = True
         except OSError:
-            return [], False
+            pass
+    try:
+        with open(CACHE, encoding='utf-8') as f:
+            feed = parse(f.read())
+    except (OSError, ET.ParseError):
+        feed = []
+    for item in feed:
+        save(item, only_new=True)
+    return archived(), fresh
+
+
+def _path(item):
+    return os.path.join(ARCHIVE, hashlib.sha1((item.link or item.title).encode()).hexdigest()[:16] + '.json')
+
+
+def save(item, only_new=False):
+    """Статья в архив: заголовок, дата, текст и, если есть, перевод. Перевод из архива не затирается пустым."""
+    path = _path(item)
+    old = {}
+    if os.path.exists(path):
+        if only_new:
+            try:
+                with open(path, encoding='utf-8') as f:
+                    old = json.load(f)
+            except (OSError, ValueError):
+                old = {}
+            if old.get('text') == item.text and old.get('title') == item.title:
+                return
+    os.makedirs(ARCHIVE, exist_ok=True)
+    record = {'title': item.title, 'link': item.link, 'date': item.date.isoformat() if item.date else '',
+              'text': item.text, 'title_ru': item.title_ru or old.get('title_ru', ''), 'text_ru': item.text_ru or old.get('text_ru', '')}
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(record, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+
+
+def archived():
+    """Все статьи архива, сверху новые."""
+    items = []
+    try:
+        names = os.listdir(ARCHIVE)
+    except OSError:
+        return items
+    for name in names:
+        if not name.endswith('.json'):
+            continue
+        try:
+            with open(os.path.join(ARCHIVE, name), encoding='utf-8') as f:
+                r = json.load(f)
+        except (OSError, ValueError):
+            continue
+        date = datetime.fromisoformat(r['date']) if r.get('date') else None
+        items.append(Item(r.get('title', ''), r.get('link', ''), date, r.get('text', ''),
+                          title_ru=r.get('title_ru', ''), text_ru=r.get('text_ru', '')))
+    items.sort(key=lambda i: i.date.timestamp() if i.date else 0, reverse=True)
+    return items
 
 
 def mark(items, names):

@@ -216,3 +216,26 @@ class Translate(unittest.TestCase):
         self.assertIn('re-enroll', masked)
         self.assertIn('man-in-the-middle', masked)
         self.assertEqual(translate.restore(masked, kept), text)
+
+
+class NewsArchive(unittest.TestCase):
+    def test_roundtrip_keeps_translation(self):
+        import tempfile
+        from datetime import datetime, timezone
+        from updater import news
+        with tempfile.TemporaryDirectory() as d:
+            old = news.ARCHIVE
+            news.ARCHIVE = d
+            try:
+                item = news.Item('Title', 'https://a/1', datetime(2026, 11, 1, tzinfo=timezone.utc), 'Text')
+                news.save(item)
+                item.title_ru, item.text_ru = 'Заголовок', 'Текст'
+                news.save(item)
+                # Та же статья из свежей ленты без перевода не стирает сохранённый перевод.
+                news.save(news.Item('Title', 'https://a/1', item.date, 'Text'), only_new=True)
+                news.save(news.Item('Other', 'https://a/2', datetime(2026, 11, 5, tzinfo=timezone.utc), 'B'), only_new=True)
+                items = news.archived()
+                self.assertEqual([i.link for i in items], ['https://a/2', 'https://a/1'])
+                self.assertEqual((items[1].title_ru, items[1].text_ru), ('Заголовок', 'Текст'))
+            finally:
+                news.ARCHIVE = old
