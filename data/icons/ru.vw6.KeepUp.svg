@@ -1,23 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <defs>
-    <linearGradient id="base" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#62a0ea"/>
-      <stop offset="1" stop-color="#1c71d8"/>
-    </linearGradient>
-    <linearGradient id="lid" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#f8e45c"/>
-      <stop offset="1" stop-color="#f6d32d"/>
-    </linearGradient>
-  </defs>
-  <!-- основание: скруглённый квадрат с тенью снизу, как у значков Adwaita -->
-  <rect x="8" y="12" width="112" height="108" rx="24" fill="#1a5fb4"/>
-  <rect x="8" y="8" width="112" height="108" rx="24" fill="url(#base)"/>
-  <!-- круговая стрелка обновления -->
-  <path d="M64 24a40 40 0 1 1-37.6 26.3" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" opacity="0.95"/>
-  <path d="M15 44l14 15 11-17z" fill="#ffffff" opacity="0.95"/>
-  <!-- коробка-пакет -->
-  <path d="M64 42l26 12v28L64 94 38 82V54z" fill="#e5a50a"/>
-  <path d="M64 42l26 12-26 12-26-12z" fill="url(#lid)"/>
-  <path d="M64 66v28L38 82V54z" fill="#c88800"/>
-  <path d="M51 48l26 12v7l-6-3v-6L45 46z" fill="#ffffff" opacity="0.55"/>
+  <!-- Коробка-пакет анфас: объём снизу тёмной кромкой, цвета палитры Adwaita (жёлтый, оранжевый). -->
+  <rect x="14" y="44" width="84" height="68" rx="8" fill="#b07000"/>
+  <rect x="14" y="40" width="84" height="68" rx="8" fill="#e5a50a"/>
+  <rect x="10" y="30" width="92" height="22" rx="6" fill="#c88800"/>
+  <rect x="10" y="26" width="92" height="22" rx="6" fill="#f6d32d"/>
+  <!-- лента по центру крышки и коробки -->
+  <rect x="49" y="26" width="14" height="82" fill="#fdf6e3" opacity="0.55"/>
+  <!-- значок обновления: синий круг с кромкой и две стрелки по кругу -->
+  <circle cx="94" cy="96" r="28" fill="#1a5fb4"/>
+  <circle cx="94" cy="92" r="28" fill="#3584e4"/>
+  <g fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M81.8 87.6A13 13 0 0 1 105.3 85.5"/>
+    <path d="M106.2 96.4A13 13 0 0 1 82.7 98.5"/>
+  </g>
+  <g fill="#ffffff">
+    <path d="M108.6 91.6l1.2-10.6-9.7 4.3z"/>
+    <path d="M79.4 92.4l-1.2 10.6 9.7-4.3z"/>
+  </g>
 </svg>
