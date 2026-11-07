@@ -10,7 +10,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Adw, Gdk, GLib, Gtk, Pango  # noqa: E402
 
-from . import appstream, aur, flatpak, kernels, news, ops, pacman  # noqa: E402
+from . import appstream, aur, flatpak, kernels, news, notes, ops, pacman  # noqa: E402
 
 PAGES = [
     ('overview', 'Обзор', 'view-grid-symbolic'),
@@ -618,8 +618,10 @@ class Window(Adw.ApplicationWindow):
                 return
             log_group.set_description('Правки сборочного сценария в AUR, сверху новые. Выберите правку, чтобы собрать и поставить '
                                       'ту версию; кнопка справа открывает правку на сайте.')
-            for i, (title_, date, note, href) in enumerate(result[:15]):
+            entries = result[:16]
+            for i, (title_, date, note, href) in enumerate(entries[:15]):
                 commit = aur.commit_of(href)
+                prev = aur.commit_of(entries[i + 1][3]) if i + 1 < len(entries) else None
                 r = row(title_, f'{date}' + (f' · {note}' if note else ''), activatable=bool(commit))
                 if i == 0:
                     r.add_suffix(pill('новейшая', 'info'))
@@ -629,7 +631,7 @@ class Window(Adw.ApplicationWindow):
                     site.connect('clicked', lambda _b, u=href.replace('http://', 'https://'): Gtk.UriLauncher(uri=u).launch(self, None, None))
                     r.add_suffix(site)
                 if commit:
-                    r.connect('activated', lambda _r, c=commit, t=title_, d=date: self.confirm_aur_build(name, base, c, t, d))
+                    r.connect('activated', lambda _r, c=commit, p=prev, t=title_, d=date: self.confirm_aur_build(name, base, c, p, t, d))
                 log_group.add(r)
 
         background(lambda: aur.rpc_info([name]), show_rpc)
@@ -647,11 +649,30 @@ class Window(Adw.ApplicationWindow):
             parent.close()
         self.nav.pop_to_tag('root')
 
-    def confirm_aur_build(self, name, base, commit, title, date):
+    def confirm_aur_build(self, name, base, commit, prev, title, date):
+        files = self.snap.foreign_files.get(name, [])
+        local_url = aur.local_info(name).get('URL', '')
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        version = Gtk.Label(xalign=0, wrap=True)
+        version.add_css_class('heading')
+        box.append(version)
+        changes = Gtk.Label(label='Ищем примечания к выпуску…', xalign=0, wrap=True, selectable=True)
+        changes.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        scroll = Gtk.ScrolledWindow(child=changes, propagate_natural_height=True, max_content_height=320,
+                                    hscrollbar_policy=Gtk.PolicyType.NEVER)
+        box.append(scroll)
+        source = Gtk.Label(xalign=0, wrap=True)
+        source.add_css_class('dim-label')
+        source.add_css_class('caption')
+        box.append(source)
+        build = Gtk.Label(xalign=0, wrap=True)
+        build.add_css_class('caption')
+        box.append(build)
+
         ask = Adw.AlertDialog(heading=f'Собрать {name} из правки от {date}?',
-                              body=f'«{title}»\n\nPKGBUILD этой правки скачается из AUR, пакет соберётся на этом компьютере и встанет '
-                                   'вместо нынешнего; установку подтвердите паролем. Старые версии иногда не собираются: файлы '
-                                   'программы могли пропасть с сайта автора. Кнопка «Обновить AUR» потом снова поставит новейшую.')
+                              body=f'«{title}». Пакет соберётся на этом компьютере и встанет вместо нынешнего; установку подтвердите '
+                                   'паролем. Старые версии иногда не собираются: файлы программы могли пропасть с сайта автора.')
+        ask.set_extra_child(box)
         ask.add_response('cancel', 'Отмена')
         ask.add_response('go', 'Собрать и поставить')
         ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
@@ -660,6 +681,22 @@ class Window(Adw.ApplicationWindow):
         ask.connect('response', lambda _d, resp: resp == 'go' and (self.nav.pop_to_tag('root'), self.run_op(
             f'Сборка {name} ({date})', aur.build_commands(base, commit, installed))))
         ask.present(self)
+
+        def show(result):
+            if isinstance(result, Exception):
+                changes.set_label(f'Примечания не загрузились: {result}')
+                return
+            version.set_label(f'Версия {result.version}')
+            if result.text:
+                changes.set_markup(markdown_markup(result.text))
+                source.set_label('Источник: ' + result.source + (f' · {result.link}' if result.link else ''))
+            else:
+                changes.set_label('Примечаний к этой версии не нашлось: ни у самой программы, ни на Flathub, ни в выпусках GitHub.'
+                                  + (f' Список изменений обычно есть на сайте программы: {local_url}' if local_url and local_url != 'None' else ''))
+            if result.build_changes:
+                build.set_label('В сборке: ' + '; '.join(result.build_changes) + '.')
+
+        background(lambda: notes.collect(name, base, commit, prev, local_url, aur.metainfo_file(files)), show)
 
     def confirm_aur_one(self, parent, update):
         ask = Adw.AlertDialog(heading=f'Обновить {update.name}?',
@@ -1029,6 +1066,25 @@ class Window(Adw.ApplicationWindow):
             self.toast('pacman сейчас занят другой программой, попробуйте позже')
             return
         OperationDialog(title, cmd, lambda code: code == 0 and self.refresh()).present(self)
+
+
+def markdown_markup(text):
+    """Примечания с GitHub пишут в Markdown: заголовки жирным, пункты точками, остальное как есть, всё экранировано."""
+    import re
+    lines = []
+    for line in text.replace('\r', '').splitlines():
+        heading = re.match(r'^#{1,6}\s+(.*)', line)
+        item = re.match(r'^\s*[-*+]\s+(.*)', line)
+        if heading:
+            body = '<b>' + GLib.markup_escape_text(heading.group(1)) + '</b>'
+        elif item:
+            body = '• ' + GLib.markup_escape_text(item.group(1))
+        else:
+            body = GLib.markup_escape_text(line)
+        body = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', body)
+        body = re.sub(r'`([^`]+)`', r'<tt>\1</tt>', body)
+        lines.append(body)
+    return re.sub(r'\n{3,}', '\n\n', '\n'.join(lines)).strip()
 
 
 def _screenshots(shots):

@@ -131,3 +131,13 @@ class AurBuild(unittest.TestCase):
         self.assertEqual(cmds[2][-1], 'abc123')
         self.assertIn('makepkg', cmds[4])
         self.assertTrue(callable(cmds[-1]))
+
+
+class ReleaseNotes(unittest.TestCase):
+    def test_srcinfo_and_changes(self):
+        from updater import notes
+        old = notes.parse_srcinfo('pkgbase = x\n\tpkgver = 8.0.4\n\tpkgrel = 1\n\tdepends = gtk3\n\tdepends = libxss\n')
+        new = notes.parse_srcinfo('pkgbase = x\n\tpkgver = 8.1.0\n\tpkgrel = 1\n\tdepends = gtk3\n\tdepends = libxtst\n\tepoch = 1\n')
+        self.assertEqual(notes.version_of(new), '1:8.1.0-1')
+        self.assertEqual(notes.compare_builds(old, new), ['новая зависимость: libxtst', 'убрана зависимость: libxss'])
+        self.assertEqual(notes._plain_version('1:8.1.0-2'), '8.1.0')
