@@ -186,20 +186,26 @@ def parse_cache_name(filename):
     return name, f'{ver}-{rel}', arch
 
 
-def cache(directory=CACHE_DIR):
-    """Все версии пакетов, лежащие в кэше: имя -> список версий от новой к старой."""
+def cache(directories=(CACHE_DIR,)):
+    """Все версии пакетов в кэше pacman и в других каталогах сборок: имя -> список версий от новой к старой."""
+    if isinstance(directories, str):
+        directories = [directories]
     by_name = {}
-    try:
-        files = os.listdir(directory)
-    except OSError:
-        return by_name
-    for filename in files:
-        parsed = parse_cache_name(filename)
-        if parsed:
-            name, version, arch = parsed
-            by_name.setdefault(name, []).append(CachedVersion(name, version, arch, os.path.join(directory, filename)))
-    for versions in by_name.values():
-        versions.sort(key=_VersionKey, reverse=True)
+    for directory in directories:
+        try:
+            files = os.listdir(directory)
+        except OSError:
+            continue
+        for filename in files:
+            parsed = parse_cache_name(filename)
+            if parsed:
+                name, version, arch = parsed
+                by_name.setdefault(name, []).append(CachedVersion(name, version, arch, os.path.join(directory, filename)))
+    for name, versions in by_name.items():
+        unique = {}
+        for v in versions:
+            unique.setdefault((v.version, v.arch), v)
+        by_name[name] = sorted(unique.values(), key=_VersionKey, reverse=True)
     return by_name
 
 

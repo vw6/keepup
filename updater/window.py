@@ -1,6 +1,7 @@
-"""Главное окно: боковые вкладки «Обзор», «Новости», «Пакеты», «Ядра», «История»."""
+"""Главное окно: боковые вкладки «Обзор», «Новости», «Пакеты», «AUR», «Flatpak», «Ядра», «История»."""
 import threading
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 
 import gi
 
@@ -8,12 +9,14 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Adw, GLib, Gtk, Pango  # noqa: E402
 
-from . import news, ops, pacman  # noqa: E402
+from . import aur, flatpak, news, ops, pacman  # noqa: E402
 
 PAGES = [
     ('overview', 'Обзор', 'view-grid-symbolic'),
     ('news', 'Новости Arch', 'x-office-document-symbolic'),
     ('packages', 'Пакеты', 'system-software-install-symbolic'),
+    ('aur', 'AUR', 'application-x-addon-symbolic'),
+    ('flatpak', 'Flatpak', 'applications-system-symbolic'),
     ('kernels', 'Ядра', 'computer-symbolic'),
     ('history', 'История', 'document-open-recent-symbolic'),
 ]
@@ -66,27 +69,47 @@ class Snapshot:
         self.kernel = ('', None)
         self.news = []
         self.news_fresh = False
+        self.foreign = {}
+        self.aur_updates = []
+        self.aur_error = None
+        self.flatpaks = []
+        self.flatpak_error = None
 
     @classmethod
     def collect(cls):
         s = cls()
-        s.packages = pacman.installed()
-        s.cache = pacman.cache()
-        pacman.with_cache(s.packages, s.cache)
-        s.log = pacman.history()
-        s.kernel = pacman.running_kernel()
-        s.reboot = pacman.reboot_reasons(s.log, pacman.boot_time())
-        try:
-            s.updates = pacman.list_updates()
-        except (RuntimeError, OSError) as e:
-            s.updates_error = str(e)
-        s.news, s.news_fresh = news.fetch()
-        news.mark(s.news, [u.name for u in s.updates])
+        # Сетевые запросы идут одновременно: репозитории, AUR, Flatpak и новости друг от друга не зависят.
+        with ThreadPoolExecutor(4) as pool:
+            repo = pool.submit(pacman.list_updates)
+            feed = pool.submit(news.fetch)
+            aur_upd = pool.submit(aur.list_updates) if aur.available() else None
+            flat = pool.submit(lambda: flatpak.with_updates(flatpak.installed())) if flatpak.available() else None
+            s.packages = pacman.installed()
+            s.cache = pacman.cache([pacman.CACHE_DIR, *aur.build_dirs()])
+            pacman.with_cache(s.packages, s.cache)
+            s.log = pacman.history()
+            s.kernel = pacman.running_kernel()
+            s.reboot = pacman.reboot_reasons(s.log, pacman.boot_time())
+            s.foreign = aur.foreign()
+            s.updates, s.updates_error = _result(repo)
+            s.news, s.news_fresh = feed.result()
+            if aur_upd:
+                s.aur_updates, s.aur_error = _result(aur_upd)
+            if flat:
+                s.flatpaks, s.flatpak_error = _result(flat)
+        news.mark(s.news, [u.name for u in s.updates + s.aur_updates])
         return s
 
 
+def _result(future):
+    try:
+        return future.result(), None
+    except Exception as e:  # ошибка одного источника не мешает остальным
+        return [], str(e)
+
+
 class OperationDialog(Adw.Dialog):
-    """Окно с выводом pacman, пока идёт действие; закрыть можно, только когда оно кончилось."""
+    """Окно с выводом команды, пока идёт действие; закрыть можно, только когда оно кончилось."""
     def __init__(self, title, cmd, on_finished):
         super().__init__(title=title, content_width=760, content_height=520, can_close=False)
         self.on_finished = on_finished
@@ -107,7 +130,7 @@ class OperationDialog(Adw.Dialog):
 
     def add_line(self, line):
         if self.buffer.get_char_count() == 0:
-            self.status.set_title('Идёт работа pacman')
+            self.status.set_title('Идёт работа')
         self.buffer.insert(self.buffer.get_end_iter(), line + '\n')
         adj = self.scroll.get_vadjustment()
         GLib.idle_add(lambda: adj.set_value(adj.get_upper()))
@@ -115,7 +138,7 @@ class OperationDialog(Adw.Dialog):
     def finish(self, code):
         self.spinner.set_visible(False)
         messages = {0: 'Готово', 126: 'Отменено: пароль не введён', 127: 'Нет прав на это действие'}
-        self.status.set_title(messages.get(code, f'pacman завершился с ошибкой (код {code}), подробности выше'))
+        self.status.set_title(messages.get(code, f'Завершилось с ошибкой (код {code}), подробности выше'))
         self.set_can_close(True)
         self.on_finished(code)
 
@@ -206,6 +229,7 @@ class Window(Adw.ApplicationWindow):
             return
         self.snap = result
         for key, build in (('overview', self.build_overview), ('news', self.build_news), ('packages', self.build_packages),
+                           ('aur', self.build_aur), ('flatpak', self.build_flatpak),
                            ('kernels', self.build_kernels), ('history', self.build_history)):
             self.holders[key].set_child(build())
 
@@ -245,6 +269,20 @@ class Window(Adw.ApplicationWindow):
             r = row('Перезагрузка не нужна', 'важные пакеты с последней загрузки не менялись')
             r.add_prefix(Gtk.Image(icon_name='object-select-symbolic'))
         state.add(r)
+
+        if s.aur_updates or s.aur_error:
+            r = row(f'AUR: обновлений {len(s.aur_updates)}' if not s.aur_error else 'AUR: проверка не удалась',
+                    s.aur_error or ', '.join(u.name for u in s.aur_updates[:5]), activatable=True)
+            r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+            r.connect('activated', lambda *_: self.open_page('aur'))
+            state.add(r)
+        flat_new = [a for a in s.flatpaks if a.new_version]
+        if flat_new or s.flatpak_error:
+            r = row(f'Flatpak: обновлений {len(flat_new)}' if not s.flatpak_error else 'Flatpak: проверка не удалась',
+                    s.flatpak_error or ', '.join(a.name for a in flat_new[:5]), activatable=True)
+            r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+            r.connect('activated', lambda *_: self.open_page('flatpak'))
+            state.add(r)
 
         release, base = s.kernel
         state.add(row('Запущено ядро', f'{release}' + (f' (пакет {base})' if base else '')))
@@ -406,6 +444,127 @@ class Window(Adw.ApplicationWindow):
             f'{name}: установка {d.version}', ops.install_files_command(d.files)))
         dialog.present(self)
 
+    # AUR
+
+    def build_aur(self):
+        s = self.snap
+        page = Adw.PreferencesPage()
+        if not aur.available():
+            page.add(_note_group('paru не установлен', 'вкладка AUR работает через paru'))
+            return page
+        upd = Adw.PreferencesGroup(title='Обновления AUR',
+                                   description='Пакеты собираются на этом компьютере. Перед обновлением загляните в изменения PKGBUILD на сайте AUR: '
+                                               'отсюда сборка идёт без просмотра.')
+        if s.aur_updates:
+            button = Gtk.Button(label='Обновить AUR', valign=Gtk.Align.CENTER)
+            button.add_css_class('suggested-action')
+            button.connect('clicked', lambda *_: self.confirm_aur())
+            upd.set_header_suffix(button)
+            for u in s.aur_updates:
+                r = row(u.name, f'{u.old}  →  {u.new}', activatable=True)
+                r.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
+                r.connect('activated', lambda _r, n=u.name: Gtk.UriLauncher(uri=f'https://aur.archlinux.org/cgit/aur.git/log/?h={n}').launch(self, None, None))
+                upd.add(r)
+        else:
+            upd.add(row('Обновлений нет', s.aur_error or 'все пакеты из AUR свежие'))
+        page.add(upd)
+
+        group = Adw.PreferencesGroup(title='Пакеты не из репозиториев',
+                                     description='AUR и пакеты из отключённых репозиториев. Откат возможен, если прошлая сборка осталась у paru или в кэше pacman.')
+        for name, version in sorted(s.foreign.items()):
+            pkg = s.packages.get(name)
+            older = pkg.cached if pkg else []
+            r = row(name, version + (f' · других версий: {len(older)}' if older else ''), activatable=bool(older))
+            if older:
+                r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+                r.connect('activated', lambda _r, n=name: self.ask_rollback(n))
+            group.add(r)
+        page.add(group)
+        return page
+
+    def confirm_aur(self):
+        names = ', '.join(u.name for u in self.snap.aur_updates[:6])
+        dialog = Adw.AlertDialog(heading='Обновить пакеты AUR?',
+                                 body=f'Будут собраны и установлены: {names}. Сборка идёт без просмотра PKGBUILD; '
+                                      'установку подтвердите паролем, окно может появиться несколько раз.')
+        dialog.add_response('cancel', 'Отмена')
+        dialog.add_response('go', 'Собрать и установить')
+        dialog.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
+        dialog.connect('response', lambda _d, resp: resp == 'go' and self.run_op('Обновление AUR', aur.upgrade_command()))
+        dialog.present(self)
+
+    # Flatpak
+
+    def build_flatpak(self):
+        s = self.snap
+        page = Adw.PreferencesPage()
+        if not flatpak.available():
+            page.add(_note_group('Flatpak не установлен', ''))
+            return page
+        new = [a for a in s.flatpaks if a.new_version]
+        upd = Adw.PreferencesGroup(title='Обновления Flatpak')
+        if new:
+            button = Gtk.Button(label='Обновить всё', valign=Gtk.Align.CENTER)
+            button.add_css_class('suggested-action')
+            button.connect('clicked', lambda *_: self.run_op('Обновление Flatpak', flatpak.upgrade_command(), pacman_lock=False))
+            upd.set_header_suffix(button)
+            for a in new:
+                upd.add(row(a.name, f'{a.version or "?"}  →  {a.new_version}'))
+        else:
+            upd.add(row('Обновлений нет', s.flatpak_error or 'все приложения свежие'))
+        page.add(upd)
+
+        group = Adw.PreferencesGroup(title='Приложения', description='Выберите приложение, чтобы поставить одну из прошлых сборок.')
+        for a in sorted(s.flatpaks, key=lambda a: a.name.lower()):
+            r = row(a.name, f'{a.version or "без номера версии"} · {a.origin} · {a.installation}', activatable=True)
+            r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+            r.connect('activated', lambda _r, app=a: self.ask_flatpak(app))
+            group.add(r)
+        if not s.flatpaks:
+            group.add(row('Приложений нет', s.flatpak_error or ''))
+        page.add(group)
+        return page
+
+    def ask_flatpak(self, app):
+        dialog = Adw.Dialog(title=app.name, content_width=560, content_height=520)
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        holder = Adw.Bin()
+        holder.set_child(Adw.StatusPage(title='Загружаем журнал сборок…', child=Adw.Spinner()))
+        view.set_content(holder)
+        dialog.set_child(view)
+        dialog.present(self)
+
+        def show(result):
+            if isinstance(result, Exception):
+                holder.set_child(Adw.StatusPage(title='Журнал не загрузился', description=str(result)))
+                return
+            commits, current = result
+            page = Adw.PreferencesPage()
+            group = Adw.PreferencesGroup(title='Сборки в хранилище', description='Сверху самая новая.')
+            for c in commits:
+                r = row(c.subject or c.commit[:12], f'{c.date} · {c.commit[:12]}', activatable=c.commit != current)
+                if c.commit == current:
+                    r.add_suffix(pill('установлена', 'ok'))
+                else:
+                    r.connect('activated', lambda _r, commit=c: self.confirm_flatpak(dialog, app, commit))
+                group.add(r)
+            page.add(group)
+            holder.set_child(page)
+
+        background(lambda: (flatpak.history(app), flatpak.current_commit(app)), show)
+
+    def confirm_flatpak(self, parent, app, commit):
+        ask = Adw.AlertDialog(heading=f'Поставить эту сборку {app.name}?',
+                              body=f'{commit.subject or commit.commit[:12]}\n{commit.date}\n\nМеняется только приложение, среды остаются как есть.')
+        ask.add_response('cancel', 'Отмена')
+        ask.add_response('go', 'Поставить')
+        ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
+        ask.set_default_response('cancel')
+        ask.connect('response', lambda _d, resp: resp == 'go' and (parent.close(), self.run_op(
+            f'{app.name}: сборка {commit.commit[:12]}', flatpak.checkout_command(app, commit.commit), pacman_lock=False)))
+        ask.present(parent)
+
     # Ядра
 
     def build_kernels(self):
@@ -481,11 +640,17 @@ class Window(Adw.ApplicationWindow):
         dialog.connect('response', lambda _d, resp: resp == 'go' and self.run_op('Обновление системы', ops.upgrade_command()))
         dialog.present(self)
 
-    def run_op(self, title, cmd):
-        if ops.busy():
+    def run_op(self, title, cmd, pacman_lock=True):
+        if pacman_lock and ops.busy():
             self.toast('pacman сейчас занят другой программой, попробуйте позже')
             return
         OperationDialog(title, cmd, lambda code: code == 0 and self.refresh()).present(self)
+
+
+def _note_group(title, subtitle):
+    group = Adw.PreferencesGroup()
+    group.add(row(title, subtitle))
+    return group
 
 
 def _date(d):
