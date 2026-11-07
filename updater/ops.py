@@ -31,7 +31,7 @@ def run(cmd, on_line, on_done):
         code = 0
         for one in commands:
             try:
-                proc = subprocess.Popen(one, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+                proc = subprocess.Popen(one, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
                                         env={**os.environ, 'LC_ALL': os.environ.get('LANG', 'C.UTF-8')})
             except OSError as e:
                 GLib.idle_add(on_line, str(e))

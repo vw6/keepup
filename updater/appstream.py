@@ -95,13 +95,23 @@ def parse_component(elem, lang='ru'):
             info.icon = (icon.text or '').strip()
     for shot in elem.iter('screenshot'):
         caption = _pick(shot, 'caption', lang)
+        # В каталоге хранилища есть уменьшенные копии; в metainfo самих программ обычно только исходный снимок.
         thumbs = sorted((img for img in shot.findall('image') if img.get('type') == 'thumbnail'),
-                        key=lambda img: abs(int(img.get('width') or 0) - 752))
+                        key=lambda img: abs(int(img.get('width') or 0) - 752)) or shot.findall('image')
         if thumbs:
             info.screenshots.append(((caption.text or '').strip() if caption is not None else '', (thumbs[0].text or '').strip()))
     for rel in elem.iter('release'):
         info.releases.append(Release(rel.get('version', ''), rel.get('date') or rel.get('timestamp', ''), _text(_pick(rel, 'description', lang), lang)))
     return info
+
+
+def from_file(path, lang='ru'):
+    """Сведения из metainfo, который поставила сама программа (/usr/share/metainfo)."""
+    try:
+        root = ET.parse(path).getroot()
+    except (OSError, ET.ParseError):
+        return None
+    return parse_component(root, lang) if root.tag == 'component' else None
 
 
 def lookup(remote, installation, app_ids, lang='ru'):

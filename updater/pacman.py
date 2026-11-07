@@ -135,7 +135,7 @@ def parse_checkupdates(text):
 
 def list_updates():
     """Доступные обновления из репозиториев. checkupdates берёт свежие списки во временную базу и систему не меняет."""
-    out = subprocess.run(['checkupdates', '--nocolor'], capture_output=True, text=True)
+    out = subprocess.run(['checkupdates', '--nocolor'], capture_output=True, stdin=subprocess.DEVNULL, text=True)
     # Код 2 значит «обновлений нет», 1 это ошибка сети или базы.
     if out.returncode == 1:
         raise RuntimeError(out.stderr.strip() or 'checkupdates завершился с ошибкой')

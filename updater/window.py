@@ -1,4 +1,5 @@
 """Главное окно: боковые вкладки «Обзор», «Новости», «Пакеты», «AUR», «Flatpak», «Ядра», «История»."""
+import os
 import threading
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -77,6 +78,7 @@ class Snapshot:
         self.repo_kernels = []
         self.boot_order = []
         self.app_info = {}
+        self.foreign_files = {}
 
     @classmethod
     def collect(cls):
@@ -94,6 +96,7 @@ class Snapshot:
             s.kernel = pacman.running_kernel()
             s.reboot = pacman.reboot_reasons(s.log, pacman.boot_time())
             s.foreign = aur.foreign()
+            s.foreign_files = aur.files_of(list(s.foreign)) if s.foreign else {}
             s.repo_kernels = kernels.available(set(s.packages))
             s.boot_order = kernels.boot_order()
             s.updates, s.updates_error = _result(repo)
@@ -471,26 +474,181 @@ class Window(Adw.ApplicationWindow):
             button.connect('clicked', lambda *_: self.confirm_aur())
             upd.set_header_suffix(button)
             for u in s.aur_updates:
-                r = row(u.name, f'{u.old}  →  {u.new}', activatable=True)
-                r.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
-                r.connect('activated', lambda _r, n=u.name: Gtk.UriLauncher(uri=f'https://aur.archlinux.org/cgit/aur.git/log/?h={n}').launch(self, None, None))
-                upd.add(r)
+                upd.add(self.aur_row(u.name, f'{u.old}  →  {u.new}'))
         else:
             upd.add(row('Обновлений нет', s.aur_error or 'все пакеты из AUR свежие'))
         page.add(upd)
 
         group = Adw.PreferencesGroup(title='Пакеты не из репозиториев',
-                                     description='AUR и пакеты из отключённых репозиториев. Откат возможен, если прошлая сборка осталась у paru или в кэше pacman.')
+                                     description='AUR и пакеты из отключённых репозиториев. Выберите пакет: описание, изменения PKGBUILD, обновление, '
+                                                 'другая версия и удаление.')
         for name, version in sorted(s.foreign.items()):
             pkg = s.packages.get(name)
             older = pkg.cached if pkg else []
-            r = row(name, version + (f' · других версий: {len(older)}' if older else ''), activatable=bool(older))
-            if older:
-                r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
-                r.connect('activated', lambda _r, n=name: self.ask_rollback(n))
-            group.add(r)
+            group.add(self.aur_row(name, version + (f' · других версий: {len(older)}' if older else '')))
         page.add(group)
         return page
+
+    def aur_row(self, name, subtitle):
+        r = row(name, subtitle, activatable=True)
+        r.add_prefix(_pkg_icon(aur.desktop_icon(self.snap.foreign_files.get(name, [])), 32))
+        if any(u.name == name for u in self.snap.aur_updates):
+            r.add_suffix(pill('есть обновление', 'info'))
+        r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
+        r.connect('activated', lambda _r: self.show_aur(name))
+        return r
+
+    def show_aur(self, name):
+        s = self.snap
+        files = s.foreign_files.get(name, [])
+        local = aur.local_info(name)
+        meta = appstream.from_file(aur.metainfo_file(files)) if aur.metainfo_file(files) else None
+        update = next((u for u in s.aur_updates if u.name == name), None)
+        pkg = s.packages.get(name)
+
+        dialog = Adw.Dialog(title=name, content_width=760, content_height=720)
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        page = Adw.PreferencesPage()
+        view.set_content(page)
+        dialog.set_child(view)
+
+        head = Gtk.Box(spacing=18, margin_bottom=6)
+        head.append(_pkg_icon(aur.desktop_icon(files), 96))
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER, hexpand=True)
+        title = Gtk.Label(label=(meta.name if meta and meta.name else name), xalign=0, wrap=True)
+        title.add_css_class('title-1')
+        text.append(title)
+        summary = Gtk.Label(label=(meta.summary if meta and meta.summary else local.get('Description', '')), xalign=0, wrap=True)
+        text.append(summary)
+        byline = Gtk.Label(label=name, xalign=0, wrap=True)
+        byline.add_css_class('dim-label')
+        text.append(byline)
+        head.append(text)
+        buttons = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER)
+        if update:
+            b = Gtk.Button(label=f'Обновить до {update.new}')
+            b.add_css_class('suggested-action')
+            b.add_css_class('pill')
+            b.connect('clicked', lambda *_: self.confirm_aur_one(dialog, update))
+            buttons.append(b)
+        if pkg and pkg.cached:
+            b = Gtk.Button(label='Другая версия…')
+            b.add_css_class('pill')
+            b.connect('clicked', lambda *_: self.ask_rollback(name))
+            buttons.append(b)
+        b = Gtk.Button(label='Удалить')
+        b.add_css_class('destructive-action')
+        b.add_css_class('pill')
+        b.connect('clicked', lambda *_: self.confirm_pkg_remove(dialog, name))
+        buttons.append(b)
+        head.append(buttons)
+        top = Adw.PreferencesGroup()
+        top.add(head)
+        page.add(top)
+
+        if meta and meta.screenshots:
+            page.add(_screenshots(meta.screenshots))
+
+        aur_group = Adw.PreferencesGroup(title='В AUR')
+        aur_wait = row('Загружаем сведения AUR…')
+        aur_group.add(aur_wait)
+        page.add(aur_group)
+        log_group = Adw.PreferencesGroup(title='Изменения PKGBUILD', description='Последние правки сборочного сценария в AUR, сверху новые.')
+        log_wait = row('Загружаем историю…')
+        log_group.add(log_wait)
+        page.add(log_group)
+
+        description = meta.description if meta and meta.description else ''
+        if description:
+            about = Adw.PreferencesGroup(title='Описание')
+            label = Gtk.Label(label=description, wrap=True, xalign=0, selectable=True)
+            label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+            about.add(label)
+            page.add(about)
+
+        details = Adw.PreferencesGroup(title='Подробно')
+        details.add(row('Установлена версия', local.get('Version', s.foreign.get(name, ''))))
+        for key, title_ in (('Installed Size', 'Размер'), ('Install Date', 'Установлен'), ('Install Reason', 'Причина установки'),
+                            ('Licenses', 'Лицензия'), ('Depends On', 'Зависимости')):
+            if local.get(key) and local[key] != 'None':
+                value = {'Explicitly installed': 'установлен вами', 'Installed as a dependency for another package': 'как зависимость'}.get(local[key], local[key])
+                details.add(row(title_, value))
+        if local.get('URL') and local['URL'] != 'None':
+            site = row('Сайт программы', local['URL'], activatable=True)
+            site.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
+            site.connect('activated', lambda *_: Gtk.UriLauncher(uri=local['URL']).launch(self, None, None))
+            details.add(site)
+        page.add(details)
+        dialog.present(self)
+
+        def show_rpc(result):
+            aur_group.remove(aur_wait)
+            if isinstance(result, Exception):
+                aur_group.add(row('Сведения AUR не загрузились', str(result)))
+                return
+            info = result.get(name)
+            if not info:
+                aur_group.add(row('Этого пакета нет в AUR', 'он из отключённого репозитория или собран вручную'))
+                log_group.set_visible(False)
+                return
+            if info.get('OutOfDate'):
+                r = row('Помечен как устаревший', 'сопровождающему сообщили, что вышла новая версия программы')
+                r.add_suffix(pill('устарел', 'warn'))
+                aur_group.add(r)
+            aur_group.add(row('Версия в AUR', info.get('Version', '')))
+            aur_group.add(row('Сопровождающий', info.get('Maintainer') or 'нет: пакет брошен, его может подхватить кто угодно'))
+            aur_group.add(row('Голоса и популярность', f'{info.get("NumVotes", 0)} голосов · популярность {info.get("Popularity", 0):.2f}'))
+            if info.get('LastModified'):
+                from datetime import datetime
+                aur_group.add(row('Последнее изменение', datetime.fromtimestamp(info['LastModified']).strftime('%d.%m.%Y')))
+            page_url = f'https://aur.archlinux.org/packages/{info.get("Name", name)}'
+            link = row('Страница в AUR', page_url, activatable=True)
+            link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
+            link.connect('activated', lambda *_: Gtk.UriLauncher(uri=page_url).launch(self, None, None))
+            aur_group.add(link)
+            background(lambda: aur.pkgbuild_log(info.get('PackageBase') or name), show_log)
+
+        def show_log(result):
+            log_group.remove(log_wait)
+            if isinstance(result, Exception) or not result:
+                log_group.add(row('История не загрузилась', str(result) if isinstance(result, Exception) else 'записей нет'))
+                return
+            for title_, date, note, href in result[:8]:
+                r = row(title_, f'{date}' + (f' · {note}' if note else ''), activatable=bool(href))
+                if href:
+                    r.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
+                    r.connect('activated', lambda _r, u=href.replace('http://', 'https://'): Gtk.UriLauncher(uri=u).launch(self, None, None))
+                log_group.add(r)
+
+        background(lambda: aur.rpc_info([name]), show_rpc)
+
+    def confirm_aur_one(self, parent, update):
+        ask = Adw.AlertDialog(heading=f'Обновить {update.name}?',
+                              body=f'{update.old} → {update.new}. Пакет соберётся на этом компьютере без просмотра PKGBUILD; '
+                                   'установку подтвердите паролем.')
+        ask.add_response('cancel', 'Отмена')
+        ask.add_response('go', 'Собрать и установить')
+        ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
+        ask.set_default_response('cancel')
+        ask.connect('response', lambda _d, resp: resp == 'go' and (parent.close(), self.run_op(
+            f'Обновление {update.name}', aur.update_one_command(update.name))))
+        ask.present(parent)
+
+    def confirm_pkg_remove(self, parent, name):
+        group = Adw.PreferencesGroup()
+        deps = Adw.SwitchRow(title='Убрать ненужные зависимости', subtitle='пакеты, поставленные только ради этого и больше никому не нужные',
+                             active=True)
+        group.add(deps)
+        ask = Adw.AlertDialog(heading=f'Удалить {name}?', body='Пакет удалится из системы; настройки в домашней папке останутся.')
+        ask.set_extra_child(group)
+        ask.add_response('cancel', 'Отмена')
+        ask.add_response('go', 'Удалить')
+        ask.set_response_appearance('go', Adw.ResponseAppearance.DESTRUCTIVE)
+        ask.set_default_response('cancel')
+        ask.connect('response', lambda _d, resp: resp == 'go' and (parent.close(), self.run_op(
+            f'Удаление {name}', aur.remove_command(name, deps.get_active()))))
+        ask.present(parent)
 
     def confirm_aur(self):
         names = ', '.join(u.name for u in self.snap.aur_updates[:6])
@@ -590,26 +748,7 @@ class Window(Adw.ApplicationWindow):
         page.add(top)
 
         if info.screenshots:
-            shots = Adw.PreferencesGroup()
-            carousel = Adw.Carousel(spacing=12, allow_scroll_wheel=False)
-            carousel.set_size_request(-1, 380)
-            for caption, url in info.screenshots[:8]:
-                frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, hexpand=True)
-                picture = Gtk.Picture(can_shrink=True, content_fit=Gtk.ContentFit.CONTAIN, vexpand=True)
-                frame.append(picture)
-                if caption:
-                    cap = Gtk.Label(label=caption, wrap=True)
-                    cap.add_css_class('dim-label')
-                    frame.append(cap)
-                carousel.append(frame)
-                background(lambda u=url: appstream.screenshot(u),
-                           lambda data, p=picture: not isinstance(data, Exception) and p.set_paintable(
-                               Gdk.Texture.new_from_bytes(GLib.Bytes.new(data))))
-            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-            box.append(carousel)
-            box.append(Adw.CarouselIndicatorDots(carousel=carousel))
-            shots.add(box)
-            page.add(shots)
+            page.add(_screenshots(info.screenshots))
 
         newer = [r for r in info.releases if app.version and flatpak_newer(r.version, app.version)]
         notes = newer or info.releases[:1]
@@ -856,6 +995,41 @@ class Window(Adw.ApplicationWindow):
             self.toast('pacman сейчас занят другой программой, попробуйте позже')
             return
         OperationDialog(title, cmd, lambda code: code == 0 and self.refresh()).present(self)
+
+
+def _screenshots(shots):
+    group = Adw.PreferencesGroup()
+    carousel = Adw.Carousel(spacing=12, allow_scroll_wheel=False)
+    carousel.set_size_request(-1, 380)
+    for caption, url in shots[:8]:
+        frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, hexpand=True)
+        picture = Gtk.Picture(can_shrink=True, content_fit=Gtk.ContentFit.CONTAIN, vexpand=True)
+        frame.append(picture)
+        if caption:
+            cap = Gtk.Label(label=caption, wrap=True)
+            cap.add_css_class('dim-label')
+            frame.append(cap)
+        carousel.append(frame)
+        background(lambda u=url: appstream.screenshot(u),
+                   lambda data, p=picture: not isinstance(data, Exception) and p.set_paintable(
+                       Gdk.Texture.new_from_bytes(GLib.Bytes.new(data))))
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+    box.append(carousel)
+    box.append(Adw.CarouselIndicatorDots(carousel=carousel))
+    group.add(box)
+    return group
+
+
+def _pkg_icon(icon, size):
+    """Значок из .desktop: путь к файлу или имя из темы; без него общий значок пакета."""
+    if icon and icon.startswith('/') and os.path.exists(icon):
+        image = Gtk.Image.new_from_file(icon)
+    else:
+        theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
+        image = Gtk.Image(icon_name=icon if icon and theme.has_icon(icon) else 'package-x-generic-symbolic')
+    image.set_pixel_size(size)
+    image.set_valign(Gtk.Align.CENTER)
+    return image
 
 
 def _icon(info, size):

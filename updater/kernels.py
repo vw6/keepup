@@ -56,7 +56,7 @@ def descriptions(names):
     """Описания пакетов одним вызовом pacman -Si."""
     if not names:
         return {}
-    out = subprocess.run(['pacman', '-Si', *names], capture_output=True, text=True, env={**os.environ, 'LC_ALL': 'C'})
+    out = subprocess.run(['pacman', '-Si', *names], capture_output=True, stdin=subprocess.DEVNULL, text=True, env={**os.environ, 'LC_ALL': 'C'})
     result, name = {}, None
     for line in out.stdout.splitlines():
         if line.startswith('Name'):
@@ -67,7 +67,7 @@ def descriptions(names):
 
 
 def available(installed_names):
-    out = subprocess.run(['pacman', '-Sl'], capture_output=True, text=True, env={**os.environ, 'LC_ALL': 'C'})
+    out = subprocess.run(['pacman', '-Sl'], capture_output=True, stdin=subprocess.DEVNULL, text=True, env={**os.environ, 'LC_ALL': 'C'})
     sync = parse_sync_list(out.stdout)
     names = repo_kernels(sync)
     suffixes = module_suffixes(installed_names, [n for n in names if n in installed_names])

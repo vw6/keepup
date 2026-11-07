@@ -101,3 +101,22 @@ class Uninstall(unittest.TestCase):
         both = flatpak.uninstall_commands(app, delete_data=True, unused=True)
         self.assertIn('--delete-data', both[0])
         self.assertEqual(both[1][-1], '--unused')
+
+
+class AurCard(unittest.TestCase):
+    def test_qi(self):
+        from updater import aur
+        f = aur.parse_qi('Name            : google-chrome\nOptional Deps   : pipewire: WebRTC\n                  kdialog: dialogs\nInstalled Size  : 441.65 MiB\n')
+        self.assertEqual(f['Installed Size'], '441.65 MiB')
+        self.assertEqual(f['Optional Deps'], 'pipewire: WebRTC\nkdialog: dialogs')
+
+    def test_feed(self):
+        from updater import aur
+        feed = ("<feed xmlns='http://www.w3.org/2005/Atom'><entry><title>upgpkg: x 2-1</title><updated>2026-11-03T23:07:52Z</updated>"
+                "<link rel='alternate' href='http://aur/commit/?id=1'/><content type='text'>\nupstream release\n</content></entry></feed>")
+        self.assertEqual(aur.parse_feed(feed), [('upgpkg: x 2-1', '2026-11-03', 'upstream release', 'http://aur/commit/?id=1')])
+
+    def test_commands(self):
+        from updater import aur
+        self.assertEqual(aur.remove_command('x'), ['pkexec', 'pacman', '-Rns', '--noconfirm', 'x'])
+        self.assertEqual(aur.remove_command('x', deps=False)[2], '-Rn')

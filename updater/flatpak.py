@@ -26,11 +26,11 @@ class Commit:
 
 
 def available():
-    return subprocess.run(['which', 'flatpak'], capture_output=True).returncode == 0
+    return subprocess.run(['which', 'flatpak'], capture_output=True, stdin=subprocess.DEVNULL).returncode == 0
 
 
 def _run(args, timeout=60):
-    return subprocess.run(['flatpak', *args], capture_output=True, text=True, env=ENV, timeout=timeout)
+    return subprocess.run(['flatpak', *args], capture_output=True, stdin=subprocess.DEVNULL, text=True, env=ENV, timeout=timeout)
 
 
 def parse_list(text):
