@@ -448,7 +448,7 @@ class Window(Adw.ApplicationWindow):
         nav_page = self.detail_page('Новость Arch', page)
         can = translate.available()
         head = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_bottom=6)
-        title = Gtk.Label(label=item.title, xalign=0, wrap=True, selectable=True)
+        title = Gtk.Label(label=item.title, xalign=0, wrap=True)
         title.add_css_class('title-1')
         head.append(title)
         meta = Gtk.Box(spacing=8)
@@ -492,11 +492,13 @@ class Window(Adw.ApplicationWindow):
             if lang == 'en' or not can:
                 title.set_label(item.title)
                 body.set_label(item.text)
+                body.select_region(0, 0)
                 body_group.set_description(None)
                 return
             if item.title_ru and item.text_ru:
                 title.set_label(item.title_ru)
                 body.set_label(item.text_ru)
+                body.select_region(0, 0)
                 body_group.set_description('Машинный перевод; при сомнениях сверьтесь с оригиналом.')
                 return
             body_group.set_description('Переводим…')
@@ -511,6 +513,7 @@ class Window(Adw.ApplicationWindow):
                 news.save(item)
                 title.set_label(result[0])
                 body.set_label(result[1])
+                body.select_region(0, 0)
                 body_group.set_description('Машинный перевод; при сомнениях сверьтесь с оригиналом.')
             background(lambda: (translate.translate(item.title), translate.translate(item.text)), done)
 
@@ -811,9 +814,10 @@ class Window(Adw.ApplicationWindow):
         background(lambda: aur.rpc_info([name]), show_rpc)
 
     def push_page(self, nav_page):
+        # GTK ставит фокус на первый текст, который можно выделять, и выделяет его целиком. Делает он это, когда страница
+        # доехала, поэтому фокус снимается по сигналу «показана», а не сразу.
+        nav_page.connect('shown', lambda *_: self.set_focus(None))
         self.nav.push(nav_page)
-        # GTK ставит фокус на первый текст, который можно выделять, и выделяет его целиком; фокус убираем.
-        GLib.idle_add(lambda: self.set_focus(None) or False)
 
     def detail_page(self, title, page):
         view = Adw.ToolbarView()
