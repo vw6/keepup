@@ -15,7 +15,7 @@ optdepends=('paru: AUR updates and builds'
             'base-devel: building AUR packages'
             'limine-mkinitcpio-hook: choosing the default kernel in Limine')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('e39002049645d830bd6eb928a50d5da50f6ba86a1cdd53dded25b5204e4389a0')
 
 check() {
   cd "$pkgname-$pkgver"
