@@ -3,7 +3,7 @@ import os
 
 NAME = 'KeepUp'
 APP_ID = 'ru.vw6.KeepUp'
-VERSION = '0.3.4'
+VERSION = '0.3.5'
 USER_AGENT = f'keepup/{VERSION}'
 
 

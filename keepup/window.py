@@ -403,6 +403,7 @@ class Window(Adw.ApplicationWindow):
         self.nav.add(Adw.NavigationPage(title=PAGES[0][1], tag='root', child=content))
         self.operation = None
         self.anchors = {}
+        self.tab_pages = {}
         self.content_page = Adw.NavigationPage(title=PAGES[0][1], child=self.nav)
         split.set_content(self.content_page)
         self.split = split
@@ -430,7 +431,7 @@ class Window(Adw.ApplicationWindow):
             r.page_key = key
             listbox.append(r)
         listbox.connect('row-selected', self.on_page_selected)
-        listbox.connect('row-activated', self.on_page_selected)
+        listbox.connect('row-activated', self.on_tab_again)
         self.sidebar_list = listbox
         # «Загрузки» внизу панели, отдельно от вкладок: выбор в одном списке снимает выбор в другом.
         self.downloads_entry = SidebarDownloads()
@@ -439,7 +440,7 @@ class Window(Adw.ApplicationWindow):
         self.downloads_list.append(Gtk.ListBoxRow(child=self.downloads_entry))
         self.downloads_list.connect('row-selected', self.on_downloads_selected)
         # Повторный щелчок по уже выбранному пункту тоже открывает его, а не оставляет открытую карточку.
-        self.downloads_list.connect('row-activated', self.on_downloads_selected)
+        self.downloads_list.connect('row-activated', self.on_tab_again)
         self.downloads = DownloadsPage(lambda: self.downloads_entry.update(self.downloads), self.show_console)
         GLib.timeout_add(150, lambda: (self.downloads.running() and self.downloads_entry.update(self.downloads)) or True)
         side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -451,24 +452,40 @@ class Window(Adw.ApplicationWindow):
         view.set_content(side)
         return view
 
-    def remember_console(self):
-        """Уходя из «Загрузок» с открытой консолью, запоминаем её: при возврате она откроется снова."""
-        if self.stack.get_visible_child_name() == 'downloads':
-            self.console_left = getattr(self.nav.get_visible_page(), 'console_op', None)
+    # Каждая вкладка помнит открытые на ней карточки и консоли: уходя, снимаем их, возвращаясь, ставим обратно как было,
+    # с той же прокруткой. Повторный щелчок по уже открытой вкладке возвращает к её началу.
+
+    def leave_tab(self):
+        key = self.stack.get_visible_child_name()
+        stack = self.nav.get_navigation_stack()
+        self.tab_pages[key] = [stack.get_item(i) for i in range(1, stack.get_n_items())]
+        self.nav.pop_to_tag('root')
+
+    def enter_tab(self, key):
+        self.stack.set_visible_child_name(key)
+        pages = [p for p in self.tab_pages.pop(key, []) if getattr(p, 'console_op', None) in (None, *self.downloads.ops)]
+        if pages:
+            self.nav.set_animate_transitions(False)
+            for p in pages:
+                self.nav.push(p)
+            self.nav.set_animate_transitions(True)
+        # Щелчок по пункту сначала выбирает его, потом «активирует»: второе в этот же миг не считаем повторным щелчком.
+        self.tab_switching = True
+        GLib.idle_add(lambda: setattr(self, 'tab_switching', False))
+
+    def on_tab_again(self, _box, r):
+        if r is None or getattr(self, 'tab_switching', False):
+            return
+        self.tab_pages.pop(self.stack.get_visible_child_name(), None)
+        self.nav.pop_to_tag('root')
+        self.split.set_show_content(True)
 
     def on_downloads_selected(self, _box, r):
         if r is None:
             return
         self.sidebar_list.unselect_all()
-        # Повторный щелчок по «Загрузкам» из самих загрузок возвращает к списку, а не в консоль.
-        reopen = getattr(self, 'console_left', None) if self.stack.get_visible_child_name() != 'downloads' else None
-        self.console_left = None
-        self.nav.pop_to_tag('root')
-        self.stack.set_visible_child_name('downloads')
-        if reopen in self.downloads.ops:
-            self.nav.set_animate_transitions(False)
-            self.show_console(reopen)
-            self.nav.set_animate_transitions(True)
+        self.leave_tab()
+        self.enter_tab('downloads')
         self.allow_search(False)
         self.content_title.set_title('Загрузки')
         self.content_page.set_title('Загрузки')
@@ -522,12 +539,10 @@ class Window(Adw.ApplicationWindow):
             return
         if hasattr(self, 'downloads_list'):
             self.downloads_list.unselect_all()
-        if hasattr(self, 'nav'):
-            self.remember_console()
-            self.nav.pop_to_tag('root')
         title = dict((k, t) for k, t, _ in PAGES)[r.page_key]
         was_install = self.stack.get_visible_child_name() == 'install'
-        self.stack.set_visible_child_name(r.page_key)
+        self.leave_tab()
+        self.enter_tab(r.page_key)
         if hasattr(self, 'search_entry'):
             self.allow_search(r.page_key != 'overview')
             # На «Установить» строка поиска ищет то, чего ещё нет в системе; на других вкладках она фильтрует их.
@@ -535,7 +550,8 @@ class Window(Adw.ApplicationWindow):
                 self.search_entry.set_placeholder_text('Программа или пакет')
                 self.search_entry.set_text(self.find_query)
                 self.search_bar.set_search_mode(True)
-                self.search_entry.grab_focus()
+                if self.nav.get_visible_page().get_tag() == 'root':
+                    self.search_entry.grab_focus()
                 background(search.catalog, lambda _r: None)
             else:
                 self.search_entry.set_placeholder_text('Найти на вкладке')
