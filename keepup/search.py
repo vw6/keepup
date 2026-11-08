@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import threading
+import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -14,6 +15,8 @@ from .pacman import CHECKUPDATES_DB
 
 AUR_SEARCH = 'https://aur.archlinux.org/rpc/v5/search/{}?by=name-desc'
 SS_HEAD = re.compile(r'^(\S+)/(\S+) (\S+)(.*)$')
+AUR_MIN = 3          # короче AUR не спрашиваем: ответ огромный и бесполезный
+AUR_KEEP = 600       # сколько секунд помнить ответ AUR на слово
 APP_TYPES = {'desktop', 'desktop-application', 'console-application'}
 
 
@@ -68,11 +71,19 @@ def repo_db():
     return CHECKUPDATES_DB if os.path.isdir(os.path.join(CHECKUPDATES_DB, 'sync')) else '/var/lib/pacman'
 
 
+_last_repo = [None, None]
+
+
 def repo(query):
+    """Пакеты репозиториев; последний ответ запоминается: AUR тут же спрашивает его же, чтобы убрать повторы."""
+    db = repo_db()
+    stamp = (query, db, _mtime(os.path.join(db, 'sync')))
+    if _last_repo[0] == stamp:
+        return _last_repo[1]
     terms = [re.escape(w) for w in words(query)]
     if not terms:
         return []
-    out = subprocess.run(['pacman', '-Ss', '--dbpath', repo_db(), '--', *terms], capture_output=True,
+    out = subprocess.run(['pacman', '-Ss', '--dbpath', db, '--', *terms], capture_output=True,
                          stdin=subprocess.DEVNULL, text=True, env={**os.environ, 'LC_ALL': 'C'})
     # Один пакет бывает в нескольких репозиториях: pacman ставит из первого по порядку, его и оставляем.
     seen, found = set(), []
@@ -80,19 +91,44 @@ def repo(query):
         if f.name not in seen:
             seen.add(f.name)
             found.append(f)
-    return sorted(found, key=lambda f: rank(f, query))
+    found.sort(key=lambda f: rank(f, query))
+    _last_repo[:] = [stamp, found]
+    return found
+
+
+def _mtime(path):
+    try:
+        return os.stat(path).st_mtime_ns
+    except OSError:
+        return 0
+
+
+def aur_key(query):
+    """Слово, по которому спрашиваем AUR (он ищет по одному): самое длинное; None, если оно короче AUR_MIN."""
+    terms = words(query)
+    key = max(terms, key=len) if terms else ''
+    return key if len(key) >= AUR_MIN else None
+
+
+_aur_answers = {}
 
 
 def aur(query, timeout=15, skip=()):
     """Пакеты AUR; то, что есть в репозиториях (skip), не показываем: оттуда оно ставится готовым."""
-    terms = words(query)
-    if not terms or max(map(len, terms)) < 2:
+    key = aur_key(query)
+    if not key:
         return []
-    # AUR ищет по одному слову: берём самое длинное, остальные проверяем сами.
-    key = max(terms, key=len)
-    req = urllib.request.Request(AUR_SEARCH.format(urllib.parse.quote(key, safe='')), headers={'User-Agent': USER_AGENT})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        results = json.load(resp).get('results', [])
+    terms = words(query)
+    # Ответ на слово помним AUR_KEEP секунд: стёртый и набранный заново запрос, как и «telegram desktop» после
+    # «telegram», в сеть второй раз не идёт.
+    kept = _aur_answers.get(key)
+    if kept and time.monotonic() - kept[0] < AUR_KEEP:
+        results = kept[1]
+    else:
+        req = urllib.request.Request(AUR_SEARCH.format(urllib.parse.quote(key, safe='')), headers={'User-Agent': USER_AGENT})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            results = json.load(resp).get('results', [])
+        _aur_answers[key] = (time.monotonic(), results)
     found = []
     for r in results:
         text = f'{r["Name"]} {r.get("Description") or ""}'.lower()

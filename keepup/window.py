@@ -650,7 +650,7 @@ class Window(Adw.ApplicationWindow):
     def build_install(self):
         self.find_query = ''
         self.find_gen = 0
-        self.find_timer = 0
+        self.find_timers = {}
         self.find_found = {}
         self.find_stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
         self.find_stack.add_named(Adw.StatusPage(icon_name='system-search-symbolic', title='Что поставить?',
@@ -664,35 +664,46 @@ class Window(Adw.ApplicationWindow):
         self.find_stack.add_named(page, 'results')
         return self.find_stack
 
-    def find(self, query, delay=250):
-        """Поиск с небольшой паузой после ввода; ответ на устаревший запрос отбрасывается."""
+    def find(self, query, delay=250, aur_delay=600):
+        """Поиск после паузы в наборе: на компьютере через четверть секунды, в AUR (это сеть) после паузы подольше.
+        Каждая буква отменяет ждущий поиск, а ответ на устаревший запрос отбрасывается."""
         self.find_query = query
-        if self.find_timer:
-            GLib.source_remove(self.find_timer)
-            self.find_timer = 0
+        self.find_gen += 1
+        gen = self.find_gen
+        for timer in self.find_timers.values():
+            GLib.source_remove(timer)
+        self.find_timers = {}
         if len(query) < 2:
-            self.find_gen += 1
             self.find_stack.set_visible_child_name('hint')
             return
 
-        def go():
-            self.find_timer = 0
-            self.find_gen += 1
-            gen = self.find_gen
+        def local():
+            self.find_timers.pop('local', None)
             self.find_stack.set_visible_child_name('results')
             works = {'repo': lambda: search.repo(query),
-                     'flatpak': lambda: search.flathub(query, search.catalog()) if flatpak.available() else [],
-                     'aur': lambda: search.aur(query, skip={f.name for f in search.repo(query)})}
-            for key, _title in self.FIND_SOURCES:
+                     'flatpak': lambda: search.flathub(query, search.catalog()) if flatpak.available() else []}
+            for key, work in works.items():
                 self.show_found(key, self.find_found.get(key), loading=True)
-                background(works[key], lambda res, k=key: gen == self.find_gen and self.show_found(k, res))
+                background(work, lambda res, k=key: gen == self.find_gen and self.show_found(k, res))
+            if not search.aur_key(query):
+                self.show_found('aur', [], note=f'В AUR ищем от {search.AUR_MIN} букв')
+            else:
+                self.show_found('aur', self.find_found.get('aur'), loading=True)
+            return False
+
+        def remote():
+            self.find_timers.pop('aur', None)
+            if search.aur_key(query):
+                background(lambda: search.aur(query, skip={f.name for f in search.repo(query)}),
+                           lambda res: gen == self.find_gen and self.show_found('aur', res))
             return False
         if delay:
-            self.find_timer = GLib.timeout_add(delay, go)
+            self.find_timers['local'] = GLib.timeout_add(delay, local)
         else:
-            go()
+            local()
+        self.find_timers['aur'] = GLib.timeout_add(max(aur_delay, delay), remote)
 
-    def show_found(self, key, items, loading=False, limit=None):
+    def show_found(self, key, items, loading=False, limit=None, note=''):
         title = dict(self.FIND_SOURCES)[key]
         group = Adw.PreferencesGroup(title=title)
         if loading:
@@ -702,7 +713,7 @@ class Window(Adw.ApplicationWindow):
         elif items is None:
             group.add(row('Ищем…'))
         elif not items:
-            group.add(row('Ничего не найдено'))
+            group.add(row(note or 'Ничего не найдено'))
         else:
             if not loading:
                 self.find_found[key] = items

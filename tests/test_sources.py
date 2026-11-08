@@ -287,3 +287,22 @@ class FindNew(unittest.TestCase):
         self.assertIn('--needed', search.aur_install_command('x'))
         item = search.Found('flatpak', 'org.gimp.GIMP', repo='flathub', data={'installation': 'system'})
         self.assertEqual(search.flatpak_install_command(item)[-3:], ['--system', 'flathub', 'org.gimp.GIMP'])
+
+
+class AurPolite(unittest.TestCase):
+    def test_one_request_per_word(self):
+        from unittest import mock
+        import io, json
+        calls = []
+
+        def fake(req, timeout=0):
+            calls.append(req.full_url)
+            return io.BytesIO(json.dumps({'results': [{'Name': 'telegram-x', 'Description': 'desktop client'}]}).encode())
+        search._aur_answers.clear()
+        with mock.patch('urllib.request.urlopen', fake):
+            self.assertEqual(search.aur('te'), [])
+            search.aur('telegram')
+            search.aur('telegram desktop')
+            search.aur('telegram')
+        self.assertEqual(len(calls), 1)
+        self.assertIsNone(search.aur_key('vs'))

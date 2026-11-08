@@ -36,6 +36,11 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.3.1" date="2026-11-08">
+      <description>
+        <p>Search is gentler on AUR: it asks only after a longer pause in typing, from three letters, and remembers answers for ten minutes.</p>
+      </description>
+    </release>
     <release version="0.3.0" date="2026-11-08">
       <description>
         <p>New Install page: search the repositories, Flathub and AUR at once and install from a package card. Repository packages are installed exactly from the fresh package lists, without a partial upgrade.</p>
