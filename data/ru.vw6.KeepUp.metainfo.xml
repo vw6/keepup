@@ -36,6 +36,11 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.2" date="2026-11-08">
+      <description>
+        <p>News translation (into Russian) is offered only when the interface is in Russian; otherwise its switch and buttons are hidden.</p>
+      </description>
+    </release>
     <release version="0.4.1" date="2026-11-08">
       <description>
         <p>English translation (en_US); it is used on any English system.</p>

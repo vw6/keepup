@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import threading
 from . import cache_dir, config_dir
+from . import i18n
 from .i18n import tr
 
 CACHE = cache_dir('translations.json')
@@ -38,7 +39,8 @@ _lock = threading.Lock()
 
 
 def available():
-    return shutil.which('trans') is not None
+    # Новости переводятся только на русский, поэтому в интерфейсе на другом языке перевода нет вовсе.
+    return i18n.language().startswith('ru') and shutil.which('trans') is not None
 
 
 def protect(text, names=None):

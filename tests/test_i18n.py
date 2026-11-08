@@ -48,3 +48,15 @@ class Locales(unittest.TestCase):
         self.assertIsNone(i18n._lookup({'a': {'b': 'x'}}, 'a.c'))
         self.assertEqual(i18n.tr('нет.такого.ключа'), 'нет.такого.ключа')
         self.assertEqual(i18n.tr('progress.step', done=1, total=2), 'Шаг 1 из 2')
+
+    def test_news_translation_only_in_russian(self):
+        from unittest import mock
+        from keepup import translate
+        with mock.patch('shutil.which', return_value='/usr/bin/trans'):
+            with mock.patch.dict(os.environ, {'KEEPUP_LANG': 'en_US'}):
+                self.assertEqual(i18n.language(), 'en_US')
+                self.assertFalse(translate.available())
+            with mock.patch.dict(os.environ, {'KEEPUP_LANG': 'ru_RU'}):
+                self.assertTrue(translate.available())
+            with mock.patch.dict(os.environ, {'KEEPUP_LANG': 'fr_FR'}):
+                self.assertEqual(i18n.language(), 'ru_RU')

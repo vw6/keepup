@@ -51,12 +51,17 @@ def _lookup(table, key):
     return node if isinstance(node, str) else None
 
 
+def language():
+    """Язык, на котором показан интерфейс: файл, выбранный по системе, иначе основной."""
+    return pick(system_language(), available()) or BASE
+
+
 def tr(key, **values):
     """Строка по ключу на языке системы; чего нет в переводе, берётся из основного языка, а если нет и там, сам ключ."""
     global _strings
     if _strings is None:
-        chosen = pick(system_language(), available())
-        _strings = [_load(chosen)] if chosen and chosen != BASE else []
+        chosen = language()
+        _strings = [_load(chosen)] if chosen != BASE else []
         _strings.append(_load(BASE))
     text = next((t for t in (_lookup(s, key) for s in _strings) if t is not None), key)
     for name, value in values.items():
