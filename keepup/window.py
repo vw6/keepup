@@ -387,7 +387,7 @@ class Window(Adw.ApplicationWindow):
         content.add_top_bar(self.search_bar)
         shortcut = Gtk.ShortcutController(scope=Gtk.ShortcutScope.GLOBAL)
         shortcut.add_shortcut(Gtk.Shortcut(trigger=Gtk.ShortcutTrigger.parse_string('<Control>f'),
-                                           action=Gtk.CallbackAction.new(lambda *_: self.search_bar.set_search_mode(True) or True)))
+                                           action=Gtk.CallbackAction.new(lambda *_: self.search_button.get_visible() and self.search_bar.set_search_mode(True) or True)))
         self.add_controller(shortcut)
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
         self.holders = {}
@@ -457,6 +457,7 @@ class Window(Adw.ApplicationWindow):
         self.sidebar_list.unselect_all()
         self.nav.pop_to_tag('root')
         self.stack.set_visible_child_name('downloads')
+        self.allow_search(False)
         self.content_title.set_title('Загрузки')
         self.content_page.set_title('Загрузки')
         self.split.set_show_content(True)
@@ -493,6 +494,13 @@ class Window(Adw.ApplicationWindow):
         page.connect('shown', lambda *_: GLib.timeout_add(60, lambda: adj.set_value(adj.get_upper()) or False))
         self.push_page(page)
 
+    def allow_search(self, allowed):
+        """На «Обзоре» и в «Загрузках» искать нечего: там нет ни кнопки, ни строки поиска, и набор её не открывает."""
+        self.search_button.set_visible(allowed)
+        self.search_bar.set_key_capture_widget(self if allowed else None)
+        if not allowed:
+            self.search_bar.set_search_mode(False)
+
     def open_downloads(self):
         self.downloads_list.select_row(self.downloads_list.get_row_at_index(0))
 
@@ -507,6 +515,7 @@ class Window(Adw.ApplicationWindow):
         was_install = self.stack.get_visible_child_name() == 'install'
         self.stack.set_visible_child_name(r.page_key)
         if hasattr(self, 'search_entry'):
+            self.allow_search(r.page_key != 'overview')
             # На «Установить» строка поиска ищет то, чего ещё нет в системе; на других вкладках она фильтрует их.
             if r.page_key == 'install':
                 self.search_entry.set_placeholder_text('Программа или пакет')
@@ -541,7 +550,7 @@ class Window(Adw.ApplicationWindow):
             return
         self.snap = result
         if self.find_query:
-            self.find(self.find_query, delay=0)
+            self.find(self.find_query, delay=0, again=True)
         for key, build in (('overview', self.build_overview), ('news', self.build_news), ('packages', self.build_packages),
                            ('aur', self.build_aur), ('flatpak', self.build_flatpak),
                            ('kernels', self.build_kernels), ('history', self.build_history)):
@@ -664,9 +673,12 @@ class Window(Adw.ApplicationWindow):
         self.find_stack.add_named(page, 'results')
         return self.find_stack
 
-    def find(self, query, delay=250, aur_delay=600):
+    def find(self, query, delay=250, aur_delay=600, again=False):
         """Поиск после паузы в наборе: на компьютере через четверть секунды, в AUR (это сеть) после паузы подольше.
-        Каждая буква отменяет ждущий поиск, а ответ на устаревший запрос отбрасывается."""
+        Каждая буква отменяет ждущий поиск, а ответ на устаревший запрос отбрасывается. Тот же запрос (например, при
+        возврате на вкладку) не повторяется, если только его не просят освежить после проверки системы."""
+        if query == self.find_query and not again:
+            return
         self.find_query = query
         self.find_gen += 1
         gen = self.find_gen
