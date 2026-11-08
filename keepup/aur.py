@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 
 from .pacman import Update, parse_checkupdates
 from . import USER_AGENT, cache_dir
+from .i18n import tr
 
 PARU_CLONE = os.path.expanduser('~/.cache/paru/clone')
 
@@ -30,7 +31,7 @@ def list_updates():
     out = subprocess.run(['paru', '-Qua'], capture_output=True, stdin=subprocess.DEVNULL, text=True, timeout=120)
     # paru отвечает кодом 1 и пустым выводом, когда обновлений нет.
     if out.returncode not in (0, 1) or (out.returncode == 1 and out.stderr.strip() and not out.stdout.strip()):
-        raise RuntimeError(out.stderr.strip() or 'paru завершился с ошибкой')
+        raise RuntimeError(out.stderr.strip() or tr('aur.list_updates.paru_zavershilsya_s_oshibkoy'))
     return [Update(u.name, u.old, u.new) for u in parse_checkupdates(out.stdout)]
 
 

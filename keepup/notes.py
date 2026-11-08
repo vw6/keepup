@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
 from . import USER_AGENT, appstream
+from .i18n import tr
 
 SRCINFO = 'https://aur.archlinux.org/cgit/aur.git/plain/.SRCINFO?h={}&id={}'
 GITHUB = re.compile(r'^https?://github\.com/([^/]+)/([^/#?]+)')
@@ -45,7 +46,7 @@ def parse_srcinfo(text):
 def srcinfo(base, commit):
     text = _get(SRCINFO.format(urllib.parse.quote(base), commit))
     if text.lstrip().startswith('<'):
-        raise RuntimeError('у этой правки нет .SRCINFO')
+        raise RuntimeError(tr('notes.srcinfo.u_etoy_pravki_net'))
     return parse_srcinfo(text)
 
 
@@ -58,13 +59,17 @@ def version_of(fields):
 
 def compare_builds(old, new):
     """Что поменялось в сборке между двумя .SRCINFO: зависимости и источники, по-человечески."""
-    names = {'depends': 'зависимость', 'makedepends': 'зависимость для сборки', 'optdepends': 'необязательная зависимость',
-             'provides': 'предоставляет', 'conflicts': 'конфликтует с'}
+    # Шаблоны «появилось» и «пропало» для каждого поля .SRCINFO.
+    texts = {'depends': (tr('notes.compare_builds.novaya_zavisimost'), tr('notes.compare_builds.ubrana_zavisimost')),
+             'makedepends': (tr('notes.compare_builds.novaya_zavisimost_dlya_sborki'), tr('notes.compare_builds.ubrana_zavisimost_dlya_sborki')),
+             'optdepends': (tr('notes.compare_builds.novaya_neobyazatelnaya_zavisimost'), tr('notes.compare_builds.ubrana_neobyazatelnaya_zavisimost')),
+             'provides': (tr('notes.compare_builds.predostavlyaet'), tr('notes.compare_builds.bolshe_ne_predostavlyaet')),
+             'conflicts': (tr('notes.compare_builds.konfliktuet_s'), tr('notes.compare_builds.bolshe_ne_konfliktuet_s'))}
     changes = []
-    for key, word in names.items():
+    for key, (added, removed) in texts.items():
         a, b = set(old.get(key, [])), set(new.get(key, []))
-        changes += [f'новая {word}: {x}' if word.startswith(('зав', 'необ')) else f'{word}: {x}' for x in sorted(b - a)]
-        changes += [f'убрана {word}: {x}' if word.startswith(('зав', 'необ')) else f'больше не {word}: {x}' for x in sorted(a - b)]
+        changes += [added.replace('{x}', x) for x in sorted(b - a)]
+        changes += [removed.replace('{x}', x) for x in sorted(a - b)]
     return changes
 
 
@@ -79,7 +84,7 @@ def _norm(text):
 
 def from_metainfo(path, version):
     info = appstream.from_file(path) if path else None
-    return _pick_release(info, version, 'описание версий из самой программы')
+    return _pick_release(info, version, tr('notes.from_metainfo.opisanie_versiy_iz_samoy'))
 
 
 def _pick_release(info, version, source):
@@ -105,7 +110,7 @@ def from_flathub(name, version, url=''):
         app_id = (elem.findtext('id') or '').removesuffix('.desktop')
         title = elem.findtext('name') or ''
         if key in (_norm(app_id.rsplit('.', 1)[-1]), _norm(title)):
-            notes = _pick_release(appstream.parse_component(elem), version, f'журнал изменений программы на Flathub ({app_id})')
+            notes = _pick_release(appstream.parse_component(elem), version, tr('notes.from_flathub.zhurnal_izmeneniy_programmy_na', app_id=app_id))
             elem.clear()
             if notes:
                 notes.link = f'https://flathub.org/apps/{app_id}'
@@ -146,7 +151,7 @@ def from_github(url, version):
 
 
 def _github_notes(data, owner, repo):
-    return Notes(text=data['body'].strip(), source=f'выпуск на GitHub ({owner}/{repo})', link=data.get('html_url', ''))
+    return Notes(text=data['body'].strip(), source=tr('notes._github_notes.vypusk_na_github', owner=owner, repo=repo), link=data.get('html_url', ''))
 
 
 def for_version(name, version, url, metainfo_path):
@@ -171,6 +176,6 @@ def collect(name, base, commit, prev_commit, url, metainfo_path):
             old = None
     if old:
         if version_of(old) != version:
-            notes.build_changes.append(f'версия {version_of(old)} → {version}')
+            notes.build_changes.append(tr('notes.collect.versiya', old=version_of(old), version=version))
         notes.build_changes += compare_builds(old, new)
     return notes

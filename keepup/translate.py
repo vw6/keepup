@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import threading
 from . import cache_dir, config_dir
+from .i18n import tr
 
 CACHE = cache_dir('translations.json')
 SETTINGS = config_dir('settings.json')
@@ -88,7 +89,7 @@ def translate(text, lang='ru', timeout=40):
     out = subprocess.run(['trans', '-no-autocorrect', '-no-ansi', '-b', f':{lang}'], input=masked, capture_output=True,
                          text=True, timeout=timeout)
     if out.returncode != 0 or not out.stdout.strip():
-        raise RuntimeError(out.stderr.strip() or 'переводчик не ответил')
+        raise RuntimeError(out.stderr.strip() or tr('translate.translate.perevodchik_ne_otvetil'))
     result = restore(out.stdout.strip(), kept)
     # Переводы идут из нескольких потоков (список и открытая новость): запись файла по очереди.
     with _lock:

@@ -40,6 +40,10 @@ make install DESTDIR=/ PREFIX=/usr
 
 Для разработки: `./run.sh` запускает программу из каталога проекта, `./run.sh --page aur` открывает сразу нужную вкладку, `KEEPUP_SEPARATE=1` запускает второй экземпляр рядом с уже открытым окном, проверки запускаются командой `make test`. Данные программы лежат в `~/.cache/keepup`, `~/.local/share/keepup` (архив новостей с переводами) и `~/.config/keepup`.
 
+## Перевод
+
+Все надписи программы лежат в `keepup/locales`, по файлу JSON на язык. Основной язык русский (`ru_RU.json`). Чтобы перевести KeepUp, скопируйте его под именем своего языка, например `en_US.json` или `de_DE.json`, переведите значения и пришлите правкой на GitHub. Ключи не меняются, а слова в фигурных скобках, например `{name}` или `{count}`, программа подставляет сама, их нужно оставить как есть. Язык выбирается по настройкам системы; строки, которых в переводе ещё нет, показываются по-русски. Проверить перевод можно запуском `KEEPUP_LANG=en_US ./run.sh`, а `make test` проверит, что ключи и подстановки совпадают с основным файлом.
+
 ## Лицензия
 
 [Mozilla Public License 2.0](LICENSE). Код можно свободно использовать, менять и включать в свои проекты, в том числе закрытые. Если вы распространяете изменённые файлы KeepUp, их исходный код нужно открыть под той же лицензией.
@@ -51,5 +55,7 @@ make install DESTDIR=/ PREFIX=/usr
 KeepUp is a GNOME-style update manager for Arch Linux and CachyOS: search and install from the repositories, Flathub and AUR, pending updates from the repositories, AUR and Flatpak, Arch news with optional machine translation and an offline archive, a page for every package with release notes, rollback to any previous version (pacman cache, Arch Linux Archive or an AUR commit), kernel management with Limine, and pacman history by day.
 
 This is primarily a personal project, published as is. Further development, fixes and support are not guaranteed. It was written in about an hour together with Claude Opus 5.5 (Anthropic) as a Python prototype that may later be rewritten in Rust.
+
+All interface strings live in `keepup/locales`, one JSON file per language, with Russian (`ru_RU.json`) as the base. To translate KeepUp, copy it to your language (for example `en_US.json`), translate the values, keep the `{placeholders}` as they are and send a pull request. Missing strings fall back to Russian; `KEEPUP_LANG=en_US ./run.sh` previews a translation and `make test` checks keys and placeholders.
 
 Licensed under the [Mozilla Public License 2.0](LICENSE): free to use, modify and include in other projects, including proprietary ones; modified KeepUp files must be published under the same license when distributed.

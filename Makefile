@@ -8,6 +8,8 @@ install:
 	install -d $(LIB)/keepup/helpers
 	install -m644 keepup/*.py $(LIB)/keepup/
 	install -m644 keepup/helpers/*.py $(LIB)/keepup/helpers/
+	install -d $(LIB)/keepup/locales
+	install -m644 keepup/locales/*.json $(LIB)/keepup/locales/
 	install -Dm755 bin/keepup $(DESTDIR)$(PREFIX)/bin/keepup
 	install -Dm644 data/ru.vw6.KeepUp.desktop $(SHARE)/applications/ru.vw6.KeepUp.desktop
 	install -Dm644 data/ru.vw6.KeepUp.metainfo.xml $(SHARE)/metainfo/ru.vw6.KeepUp.metainfo.xml

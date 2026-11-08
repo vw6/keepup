@@ -12,23 +12,24 @@ gi.require_version('Adw', '1')
 from gi.repository import Adw, Gdk, GLib, GObject, Gtk, Pango  # noqa: E402
 
 from . import NAME, appstream, archive, aur, flatpak, kernels, news, notes, ops, pacman, progress, search, translate  # noqa: E402
+from .i18n import tr  # noqa: E402
 
 PAGES = [
-    ('overview', 'Обзор', 'view-grid-symbolic'),
-    ('install', 'Установить', 'list-add-symbolic'),
-    ('news', 'Новости Arch', 'x-office-document-symbolic'),
-    ('packages', 'Пакеты', 'system-software-install-symbolic'),
+    ('overview', tr('pages.obzor'), 'view-grid-symbolic'),
+    ('install', tr('pages.ustanovit'), 'list-add-symbolic'),
+    ('news', tr('pages.novosti_arch'), 'x-office-document-symbolic'),
+    ('packages', tr('pages.pakety'), 'system-software-install-symbolic'),
     ('aur', 'AUR', 'application-x-addon-symbolic'),
     ('flatpak', 'Flatpak', 'applications-system-symbolic'),
-    ('kernels', 'Ядра', 'computer-symbolic'),
-    ('history', 'История', 'document-open-recent-symbolic'),
+    ('kernels', tr('pages.yadra'), 'computer-symbolic'),
+    ('history', tr('pages.istoriya'), 'document-open-recent-symbolic'),
 ]
 ROLLBACK_ROWS = 80
 # Вид изменения в журнале pacman: заголовок группы на странице дня и слово для итога в списке дней.
-HISTORY_GROUPS = {'upgraded': ('Обновлены', 'обновлено'), 'installed': ('Установлены', 'установлено'),
-                  'downgraded': ('Откачены', 'откачено'), 'reinstalled': ('Переустановлены', 'переустановлено'),
-                  'removed': ('Удалены', 'удалено')}
-MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+HISTORY_GROUPS = {'upgraded': (tr('history_groups.obnovleny'), tr('history_groups.obnovleno')), 'installed': (tr('history_groups.ustanovleny'), tr('history_groups.ustanovleno')),
+                  'downgraded': (tr('history_groups.otkacheny'), tr('history_groups.otkacheno')), 'reinstalled': (tr('history_groups.pereustanovleny'), tr('history_groups.pereustanovleno')),
+                  'removed': (tr('history_groups.udaleny'), tr('history_groups.udaleno'))}
+MONTHS = [tr('months.yanvarya'), tr('months.fevralya'), tr('months.marta'), tr('months.aprelya'), tr('months.maya'), tr('months.iyunya'), tr('months.iyulya'), tr('months.avgusta'), tr('months.sentyabrya'), tr('months.oktyabrya'), tr('months.noyabrya'), tr('months.dekabrya')]
 HISTORY_DAYS = 90
 
 CSS = b"""
@@ -190,7 +191,7 @@ class Operation:
         return self.code is not None
 
     def result(self):
-        return {0: 'Готово', 126: 'Отменено: пароль не введён', 127: 'Нет прав на это действие'}.get(self.code, 'Не получилось')
+        return {0: tr('operation.gotovo'), 126: tr('operation.otmeneno_parol_ne_vveden'), 127: tr('operation.net_prav_na_eto')}.get(self.code, tr('operation.ne_poluchilos'))
 
 
 class InlineProgress(Gtk.Box):
@@ -219,9 +220,9 @@ class InlineProgress(Gtk.Box):
             self.stage.remove_css_class('error')
             self.stage.add_css_class('success' if op.code == 0 else 'error')
             self.bar.set_fraction(1.0 if op.code == 0 else self.bar.get_fraction())
-            self.detail.set_label('изменения применены' if op.code == 0 else 'подробности в консоли внизу')
+            self.detail.set_label(tr('inline_progress.izmeneniya_primeneny') if op.code == 0 else tr('inline_progress.podrobnosti_v_konsoli_vnizu'))
             return
-        self.stage.set_label(op.state.stage + '…')
+        self.stage.set_label(progress.label(op.state) + '…')
         self.detail.set_label(op.state.detail or ' ')
         if op.overall.value > 0:
             self.bar.set_fraction(op.overall.value)
@@ -244,12 +245,12 @@ class DownloadRow(Gtk.Box):
         text.append(title)
         text.append(self.stage)
         top.append(text)
-        self.remove_button = Gtk.Button(icon_name='user-trash-symbolic', tooltip_text='Убрать из списка', valign=Gtk.Align.CENTER,
+        self.remove_button = Gtk.Button(icon_name='user-trash-symbolic', tooltip_text=tr('download_row.ubrat_iz_spiska'), valign=Gtk.Align.CENTER,
                                         visible=False)
         self.remove_button.add_css_class('flat')
         self.remove_button.connect('clicked', lambda *_: on_remove(self))
         top.append(self.remove_button)
-        console_button = Gtk.Button(icon_name='utilities-terminal-symbolic', tooltip_text='Консоль: весь вывод с начала',
+        console_button = Gtk.Button(icon_name='utilities-terminal-symbolic', tooltip_text=tr('download_row.konsol_ves_vyvod_s'),
                                     valign=Gtk.Align.CENTER)
         console_button.add_css_class('flat')
         console_button.connect('clicked', lambda *_: on_console(op))
@@ -271,13 +272,13 @@ class DownloadRow(Gtk.Box):
             icon = Gtk.Image(icon_name='object-select-symbolic' if ok else 'dialog-error-symbolic')
             icon.add_css_class('success' if ok else 'error')
             self.icon.set_child(icon)
-            self.stage.set_label(op.result() + ('' if ok or op.code in (126, 127) else f' (код {op.code}), подробности в консоли'))
+            self.stage.set_label(op.result() + ('' if ok or op.code in (126, 127) else tr('download_row.kod_podrobnosti_v_konsoli', code=op.code)))
             self.bar.set_visible(False)
             self.remove_button.set_visible(True)
             return
         if not isinstance(self.icon.get_child(), Adw.Spinner):
             self.icon.set_child(Adw.Spinner(width_request=16, height_request=16))
-        self.stage.set_label(op.state.stage + '…' + (f'  ·  {op.state.detail}' if op.state.detail else ''))
+        self.stage.set_label(progress.label(op.state) + '…' + (f'  ·  {op.state.detail}' if op.state.detail else ''))
         if op.overall.value > 0:
             self.bar.set_fraction(op.overall.value)
 
@@ -289,8 +290,8 @@ class DownloadsPage(Gtk.Stack):
         self.on_change = on_change
         self.on_console = on_console
         self.ops = []
-        self.add_named(Adw.StatusPage(icon_name='folder-download-symbolic', title='Пока пусто',
-                                      description='Здесь будут обновления, установки и удаления, запущенные в KeepUp.'), 'empty')
+        self.add_named(Adw.StatusPage(icon_name='folder-download-symbolic', title=tr('downloads_page.poka_pusto'),
+                                      description=tr('downloads_page.zdes_budut_obnovleniya_ustanovki')), 'empty')
         self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, valign=Gtk.Align.START)
         self.list.add_css_class('boxed-list')
         page = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True,
@@ -326,7 +327,7 @@ class SidebarDownloads(Gtk.Box):
         self.spinner = Adw.Spinner(width_request=16, height_request=16)
         self.icon.set_child(self.idle_icon)
         top.append(self.icon)
-        top.append(Gtk.Label(label='Загрузки', xalign=0, hexpand=True))
+        top.append(Gtk.Label(label=tr('sidebar_downloads.zagruzki'), xalign=0, hexpand=True))
         self.badge = Gtk.Label(visible=False)
         self.badge.add_css_class('pill')
         self.badge.add_css_class('info')
@@ -340,7 +341,7 @@ class SidebarDownloads(Gtk.Box):
         self.icon.set_child(self.spinner if running else self.idle_icon)
         self.bar.set_visible(bool(running))
         if running:
-            self.badge.set_label(f'идёт: {len(running)}')
+            self.badge.set_label(tr('sidebar_downloads.idet', count=len(running)))
             self.badge.set_visible(True)
             value = min(op.overall.value for op in running)
             if value > 0:
@@ -349,7 +350,7 @@ class SidebarDownloads(Gtk.Box):
                 self.bar.pulse()
         else:
             failed = [op for op in page.ops if op.finished and op.code not in (0, 126, 127)]
-            self.badge.set_label('ошибка' if failed else '')
+            self.badge.set_label(tr('sidebar_downloads.oshibka') if failed else '')
             self.badge.set_visible(bool(failed))
 
 
@@ -369,15 +370,15 @@ class Window(Adw.ApplicationWindow):
         self.content_title = Adw.WindowTitle(title=PAGES[0][1])
         content = Adw.ToolbarView()
         header = Adw.HeaderBar(title_widget=self.content_title)
-        self.refresh_button = Gtk.Button(icon_name='view-refresh-symbolic', tooltip_text='Проверить заново')
+        self.refresh_button = Gtk.Button(icon_name='view-refresh-symbolic', tooltip_text=tr('window.proverit_zanovo'))
         self.refresh_button.connect('clicked', lambda *_: self.refresh())
         header.pack_end(self.refresh_button)
-        self.search_button = Gtk.ToggleButton(icon_name='system-search-symbolic', tooltip_text='Поиск (Ctrl+F)')
+        self.search_button = Gtk.ToggleButton(icon_name='system-search-symbolic', tooltip_text=tr('window.poisk_ctrl_f'))
         header.pack_end(self.search_button)
         content.add_top_bar(header)
         # Поиск фильтрует открытую вкладку; начать печатать можно сразу, строка откроется сама.
         self.query = ''
-        self.search_entry = Gtk.SearchEntry(placeholder_text='Найти на вкладке', hexpand=True)
+        self.search_entry = Gtk.SearchEntry(placeholder_text=tr('window.nayti_na_vkladke'), hexpand=True)
         self.search_entry.connect('search-changed', self.on_search)
         self.search_bar = Gtk.SearchBar(child=Adw.Clamp(maximum_size=600, child=self.search_entry), show_close_button=True)
         self.search_bar.connect_entry(self.search_entry)
@@ -489,8 +490,8 @@ class Window(Adw.ApplicationWindow):
         self.leave_tab()
         self.enter_tab('downloads')
         self.allow_search(False)
-        self.content_title.set_title('Загрузки')
-        self.content_page.set_title('Загрузки')
+        self.content_title.set_title(tr('on_downloads_selected.zagruzki'))
+        self.content_page.set_title(tr('on_downloads_selected.zagruzki'))
         self.split.set_show_content(True)
 
     def show_console(self, op):
@@ -502,16 +503,16 @@ class Window(Adw.ApplicationWindow):
         scroll.add_css_class('view')
         title = Adw.WindowTitle(title=op.title, subtitle='')
         header = Adw.HeaderBar(title_widget=title)
-        copy = Gtk.Button(icon_name='edit-copy-symbolic', tooltip_text='Скопировать всё')
+        copy = Gtk.Button(icon_name='edit-copy-symbolic', tooltip_text=tr('show_console.skopirovat_vse'))
         copy.connect('clicked', lambda *_: (self.get_clipboard().set(op.buffer.get_text(op.buffer.get_start_iter(),
                                                                                        op.buffer.get_end_iter(), False)),
-                                            self.toast('Вывод скопирован')))
+                                            self.toast(tr('show_console.vyvod_skopirovan'))))
         header.pack_end(copy)
         toolbar = Adw.ToolbarView()
         toolbar.add_top_bar(header)
         toolbar.set_content(scroll)
         self.page_counter = getattr(self, 'page_counter', 0) + 1
-        page = Adw.NavigationPage(title=f'Консоль: {op.title}', child=toolbar, tag=f'detail-{self.page_counter}')
+        page = Adw.NavigationPage(title=tr('show_console.konsol', title=op.title), child=toolbar, tag=f'detail-{self.page_counter}')
         page.console_op = op
         follow = {'on': True}
         adj = scroll.get_vadjustment()
@@ -522,7 +523,7 @@ class Window(Adw.ApplicationWindow):
             if follow['on']:
                 GLib.idle_add(lambda: adj.set_value(adj.get_upper()) or False)
         op.buffer.connect('changed', to_end)
-        op.listen(lambda o: title.set_subtitle(o.result() if o.finished else o.state.stage + (f' · {o.state.detail}' if o.state.detail else '')))
+        op.listen(lambda o: title.set_subtitle(o.result() if o.finished else progress.label(o.state) + (f' · {o.state.detail}' if o.state.detail else '')))
         page.connect('shown', lambda *_: GLib.timeout_add(60, lambda: adj.set_value(adj.get_upper()) or False))
         self.push_page(page)
 
@@ -549,14 +550,14 @@ class Window(Adw.ApplicationWindow):
             self.allow_search(r.page_key != 'overview')
             # На «Установить» строка поиска ищет то, чего ещё нет в системе; на других вкладках она фильтрует их.
             if r.page_key == 'install':
-                self.search_entry.set_placeholder_text('Программа или пакет')
+                self.search_entry.set_placeholder_text(tr('on_page_selected.programma_ili_paket'))
                 self.search_entry.set_text(self.find_query)
                 self.search_bar.set_search_mode(True)
                 if self.nav.get_visible_page().get_tag() == 'root':
                     self.search_entry.grab_focus()
                 background(search.catalog, lambda _r: None)
             else:
-                self.search_entry.set_placeholder_text('Найти на вкладке')
+                self.search_entry.set_placeholder_text(tr('on_page_selected.nayti_na_vkladke'))
                 if was_install:
                     # Строку открыла сама вкладка «Установить», поэтому и закрываем её, уходя.
                     self.search_entry.set_text('')
@@ -571,7 +572,7 @@ class Window(Adw.ApplicationWindow):
     def show_loading(self):
         for key, holder in self.holders.items():
             if key != 'install':
-                holder.set_child(Adw.StatusPage(title='Проверяем систему…', child=Adw.Spinner()))
+                holder.set_child(Adw.StatusPage(title=tr('show_loading.proveryaem_sistemu'), child=Adw.Spinner()))
 
     def refresh(self):
         self.refresh_button.set_sensitive(False)
@@ -580,7 +581,7 @@ class Window(Adw.ApplicationWindow):
     def on_snapshot(self, result):
         self.refresh_button.set_sensitive(True)
         if isinstance(result, Exception):
-            self.toast(f'Проверка не удалась: {result}')
+            self.toast(tr('on_snapshot.proverka_ne_udalas', result=result))
             return
         self.snap = result
         if self.find_query:
@@ -620,63 +621,63 @@ class Window(Adw.ApplicationWindow):
     def build_overview(self):
         s = self.snap
         page = Adw.PreferencesPage()
-        state = Adw.PreferencesGroup(title='Состояние')
+        state = Adw.PreferencesGroup(title=tr('build_overview.sostoyanie'))
         page.add(state)
 
         if s.updates_error:
-            r = row('Не удалось проверить обновления', s.updates_error)
+            r = row(tr('build_overview.ne_udalos_proverit_obnovleniya'), s.updates_error)
             r.add_prefix(Gtk.Image(icon_name='dialog-warning-symbolic'))
         elif s.updates:
             reboot_count = sum(u.needs_reboot for u in s.updates)
-            sub = f'из них после {reboot_count} понадобится перезагрузка' if reboot_count else 'перезагрузка после них не понадобится'
-            r = row(f'Доступно обновлений: {len(s.updates)}', sub)
-            button = Gtk.Button(label='Обновить всё', valign=Gtk.Align.CENTER)
+            sub = tr('build_overview.iz_nih_posle_ponadobitsya', reboot_count=reboot_count) if reboot_count else tr('build_overview.perezagruzka_posle_nih_ne')
+            r = row(tr('build_overview.dostupno_obnovleniy', count=len(s.updates)), sub)
+            button = Gtk.Button(label=tr('build_overview.obnovit_vse'), valign=Gtk.Align.CENTER)
             button.add_css_class('suggested-action')
             button.connect('clicked', lambda *_: self.confirm_upgrade())
             r.add_suffix(button)
         else:
-            r = row('Система обновлена', 'новых версий в репозиториях нет')
+            r = row(tr('build_overview.sistema_obnovlena'), tr('build_overview.novyh_versiy_v_repozitoriyah'))
             r.add_prefix(Gtk.Image(icon_name='object-select-symbolic'))
         state.add(r)
 
         if s.reboot:
             names = ', '.join(sorted({e.name for e in s.reboot})[:6])
-            r = row('Нужна перезагрузка', f'после загрузки обновились: {names}')
+            r = row(tr('build_overview.nuzhna_perezagruzka'), tr('build_overview.posle_zagruzki_obnovilis', names=names))
             r.add_prefix(Gtk.Image(icon_name='system-reboot-symbolic'))
-            r.add_suffix(pill('перезагрузка', 'warn'))
+            r.add_suffix(pill(tr('build_overview.perezagruzka'), 'warn'))
         else:
-            r = row('Перезагрузка не нужна', 'важные пакеты с последней загрузки не менялись')
+            r = row(tr('build_overview.perezagruzka_ne_nuzhna'), tr('build_overview.vazhnye_pakety_s_posledney'))
             r.add_prefix(Gtk.Image(icon_name='object-select-symbolic'))
         state.add(r)
 
         if s.aur_updates or s.aur_error:
-            r = row(f'AUR: обновлений {len(s.aur_updates)}' if not s.aur_error else 'AUR: проверка не удалась',
+            r = row(tr('build_overview.aur_obnovleniy', count=len(s.aur_updates)) if not s.aur_error else tr('build_overview.aur_proverka_ne_udalas'),
                     s.aur_error or ', '.join(u.name for u in s.aur_updates[:5]), activatable=True)
             r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
             r.connect('activated', lambda *_: self.open_page('aur'))
             state.add(r)
         flat_new = [a for a in s.flatpaks if a.new_version]
         if flat_new or s.flatpak_error:
-            r = row(f'Flatpak: обновлений {len(flat_new)}' if not s.flatpak_error else 'Flatpak: проверка не удалась',
+            r = row(tr('build_overview.flatpak_obnovleniy', count=len(flat_new)) if not s.flatpak_error else tr('build_overview.flatpak_proverka_ne_udalas'),
                     s.flatpak_error or ', '.join(a.name for a in flat_new[:5]), activatable=True)
             r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
             r.connect('activated', lambda *_: self.open_page('flatpak'))
             state.add(r)
 
         release, base = s.kernel
-        state.add(row('Запущено ядро', f'{release}' + (f' (пакет {base})' if base else '')))
+        state.add(row(tr('build_overview.zapuscheno_yadro'), f'{release}' + (tr('build_overview.paket', base=base) if base else '')))
 
         touching = [n for n in s.news if n.touches]
-        news_group = Adw.PreferencesGroup(title='Прочитать до обновления',
-                                          description='Новости Arch, где упомянуты пакеты из ваших обновлений.')
+        news_group = Adw.PreferencesGroup(title=tr('build_overview.prochitat_do_obnovleniya'),
+                                          description=tr('build_overview.novosti_arch_gde_upomyanuty'))
         if touching:
             for item in touching[:5]:
-                r = row(item.title, f'{_date(item.date)} · касается: {", ".join(item.touches)}', activatable=True)
+                r = row(item.title, tr('build_overview.kasaetsya', date=_date(item.date), packages=", ".join(item.touches)), activatable=True)
                 r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
                 r.connect('activated', lambda _r, it=item: self.show_news(it))
                 news_group.add(r)
         else:
-            news_group.add(row('Таких новостей нет', 'свежие новости Arch не упоминают пакеты из списка обновлений'))
+            news_group.add(row(tr('build_overview.takih_novostey_net'), tr('build_overview.svezhie_novosti_arch_ne')))
         page.add(news_group)
         return page
 
@@ -687,7 +688,7 @@ class Window(Adw.ApplicationWindow):
 
     # Поиск и установка нового: репозитории, AUR и Flathub; установленное открывается своей обычной карточкой.
 
-    FIND_SOURCES = (('repo', 'Репозитории'), ('flatpak', 'Flathub'), ('aur', 'AUR'))
+    FIND_SOURCES = (('repo', tr('common.repozitorii')), ('flatpak', 'Flathub'), ('aur', 'AUR'))
     FIND_ROWS = 8
 
     def build_install(self):
@@ -696,8 +697,8 @@ class Window(Adw.ApplicationWindow):
         self.find_timers = {}
         self.find_found = {}
         self.find_stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
-        self.find_stack.add_named(Adw.StatusPage(icon_name='system-search-symbolic', title='Что поставить?',
-                                                 description='Начните печатать: поиск идёт сразу по репозиториям, Flathub и AUR.'),
+        self.find_stack.add_named(Adw.StatusPage(icon_name='system-search-symbolic', title=tr('build_install.chto_postavit'),
+                                                 description=tr('build_install.nachnite_pechatat_poisk_idet')),
                                   'hint')
         page = WidePage()
         self.find_bins = {}
@@ -732,7 +733,7 @@ class Window(Adw.ApplicationWindow):
                 self.show_found(key, self.find_found.get(key), loading=True)
                 background(work, lambda res, k=key: gen == self.find_gen and self.show_found(k, res))
             if not search.aur_key(query):
-                self.show_found('aur', [], note=f'В AUR ищем от {search.AUR_MIN} букв')
+                self.show_found('aur', [], note=tr('find.v_aur_ischem_ot', count=search.AUR_MIN))
             else:
                 self.show_found('aur', self.find_found.get('aur'), loading=True)
             return False
@@ -755,20 +756,20 @@ class Window(Adw.ApplicationWindow):
         if loading:
             group.set_header_suffix(Adw.Spinner())
         if isinstance(items, Exception):
-            group.add(row('Не удалось найти', str(items)))
+            group.add(row(tr('show_found.ne_udalos_nayti'), str(items)))
         elif items is None:
-            group.add(row('Ищем…'))
+            group.add(row(tr('show_found.ischem')))
         elif not items:
-            group.add(row(note or 'Ничего не найдено'))
+            group.add(row(note or tr('show_found.nichego_ne_naydeno')))
         else:
             if not loading:
                 self.find_found[key] = items
-                group.set_description(f'найдено: {len(items)}')
+                group.set_description(tr('show_found.naydeno', count=len(items)))
             limit = limit or self.FIND_ROWS
             for item in items[:limit]:
                 group.add(self.found_row(item))
             if len(items) > limit:
-                more = row(f'Показать ещё {min(len(items) - limit, 40)}', activatable=True)
+                more = row(tr('show_found.pokazat_esche', count=min(len(items) - limit, 40)), activatable=True)
                 more.add_suffix(Gtk.Image(icon_name='go-down-symbolic'))
                 more.connect('activated', lambda *_: self.show_found(key, items, limit=limit + 40))
                 group.add(more)
@@ -792,9 +793,9 @@ class Window(Adw.ApplicationWindow):
             return f'{item.repo} · {item.version}'
         if item.source == 'aur':
             d = item.data
-            return 'AUR · ' + ' · '.join(x for x in (item.version, f'голосов {d.get("NumVotes", 0)}',
-                                                     'помечен устаревшим' if d.get('OutOfDate') else '',
-                                                     'без сопровождающего' if not d.get('Maintainer') else '') if x)
+            return 'AUR · ' + ' · '.join(x for x in (item.version, tr('found_where.golosov', votes=d.get("NumVotes", 0)),
+                                                     tr('found_where.pomechen_ustarevshim') if d.get('OutOfDate') else '',
+                                                     tr('found_where.bez_soprovozhdayuschego') if not d.get('Maintainer') else '') if x)
         return f'Flathub · {item.name}'
 
     def found_row(self, item):
@@ -802,7 +803,7 @@ class Window(Adw.ApplicationWindow):
         r.add_prefix(self.found_icon(item, 40 if item.source == 'flatpak' else 32))
         installed = self.found_installed(item)
         if installed:
-            r.add_suffix(pill('установлен', 'ok'))
+            r.add_suffix(pill(tr('found_row.ustanovlen'), 'ok'))
         r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
         r.connect('activated', lambda _r: self.open_found(item))
         return r
@@ -835,7 +836,7 @@ class Window(Adw.ApplicationWindow):
         text.append(where)
         head.append(text)
         buttons = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER)
-        install = Gtk.Button(label='Установить')
+        install = Gtk.Button(label=tr('show_new.ustanovit'))
         install.add_css_class('suggested-action')
         install.add_css_class('pill')
         install.connect('clicked', lambda *_: self.ask_new_install(item))
@@ -859,13 +860,13 @@ class Window(Adw.ApplicationWindow):
 
     def fill_new(self, page, item, info):
         if isinstance(info, Exception) or not info:
-            page.add(_note_group('Подробностей нет', str(info) if isinstance(info, Exception) else ''))
+            page.add(_note_group(tr('fill_new.podrobnostey_net'), str(info) if isinstance(info, Exception) else ''))
             return
-        details = Adw.PreferencesGroup(title='Подробно')
+        details = Adw.PreferencesGroup(title=tr('fill_new.podrobno'))
 
         def add(title, value):
             if value and value != 'None':
-                details.add(row(title, value.replace('\n', ' ') if title != 'Описание' else value))
+                details.add(row(title, value.replace('\n', ' ')))
 
         def link(title, url):
             if url and url != 'None':
@@ -874,43 +875,43 @@ class Window(Adw.ApplicationWindow):
                 r.connect('activated', lambda *_: Gtk.UriLauncher(uri=url).launch(self, None, None))
                 details.add(r)
         if item.source == 'repo':
-            add('Версия', info.get('Version'))
-            add('Репозиторий', info.get('Repository'))
-            add('Скачать', info.get('Download Size'))
-            add('Займёт на диске', info.get('Installed Size'))
-            add('Зависит от', '  '.join(info.get('Depends On', '').split()))
-            add('Лицензия', info.get('Licenses'))
-            link('Сайт', info.get('URL'))
+            add(tr('fill_new.versiya'), info.get('Version'))
+            add(tr('fill_new.repozitoriy'), info.get('Repository'))
+            add(tr('fill_new.skachat'), info.get('Download Size'))
+            add(tr('fill_new.zaymet_na_diske'), info.get('Installed Size'))
+            add(tr('fill_new.zavisit_ot'), '  '.join(info.get('Depends On', '').split()))
+            add(tr('fill_new.litsenziya'), info.get('Licenses'))
+            link(tr('fill_new.sayt'), info.get('URL'))
         elif item.source == 'aur':
             if info.get('OutOfDate') or not info.get('Maintainer'):
-                page.add(_note_group('Стоит присмотреться', ' '.join(x for x in (
-                    'Пакет помечен устаревшим: сборка может не пройти.' if info.get('OutOfDate') else '',
-                    'У пакета нет сопровождающего: его никто не обновляет.' if not info.get('Maintainer') else '') if x)))
-            add('Версия', info.get('Version'))
-            add('Сопровождающий', info.get('Maintainer') or 'нет')
-            add('Голосов', f'{info.get("NumVotes", 0)}, популярность {info.get("Popularity", 0):.2f}')
+                page.add(_note_group(tr('fill_new.stoit_prismotretsya'), ' '.join(x for x in (
+                    tr('fill_new.paket_pomechen_ustarevshim_sborka') if info.get('OutOfDate') else '',
+                    tr('fill_new.u_paketa_net_soprovozhdayuschego') if not info.get('Maintainer') else '') if x)))
+            add(tr('fill_new.versiya'), info.get('Version'))
+            add(tr('fill_new.soprovozhdayuschiy'), info.get('Maintainer') or tr('fill_new.net'))
+            add(tr('fill_new.golosov'), tr('fill_new.populyarnost', votes=info.get("NumVotes", 0), popularity=f'{info.get("Popularity", 0):.2f}'))
             if info.get('LastModified'):
-                add('Обновлён', _long_date(datetime.fromtimestamp(info['LastModified']).date()))
-            add('Зависит от', '  '.join(info.get('Depends', [])))
-            add('Для сборки нужно', '  '.join(info.get('MakeDepends', [])))
-            add('Лицензия', ', '.join(info.get('License', [])))
-            link('Сайт', info.get('URL'))
+                add(tr('fill_new.obnovlen'), _long_date(datetime.fromtimestamp(info['LastModified']).date()))
+            add(tr('fill_new.zavisit_ot'), '  '.join(info.get('Depends', [])))
+            add(tr('fill_new.dlya_sborki_nuzhno'), '  '.join(info.get('MakeDepends', [])))
+            add(tr('fill_new.litsenziya'), ', '.join(info.get('License', [])))
+            link(tr('fill_new.sayt'), info.get('URL'))
             link('PKGBUILD', f'https://aur.archlinux.org/cgit/aur.git/tree/PKGBUILD?h={info.get("PackageBase", item.name)}')
         else:
             if info.screenshots:
                 page.add(_screenshots(info.screenshots))
             if info.description:
-                about = Adw.PreferencesGroup(title='Описание')
+                about = Adw.PreferencesGroup(title=tr('fill_new.opisanie'))
                 label = Gtk.Label(label=info.description, wrap=True, xalign=0, selectable=True)
                 label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
                 about.add(label)
                 page.add(about)
             if info.releases:
-                add('Версия', info.releases[0].version)
-            add('Разработчик', info.developer)
-            add('Лицензия', info.license)
-            add('Идентификатор', item.name)
-            link('Сайт', info.homepage)
+                add(tr('fill_new.versiya'), info.releases[0].version)
+            add(tr('fill_new.razrabotchik'), info.developer)
+            add(tr('fill_new.litsenziya'), info.license)
+            add(tr('fill_new.identifikator'), item.name)
+            link(tr('fill_new.sayt'), info.homepage)
         page.add(details)
 
     def ask_new_install(self, item):
@@ -918,49 +919,47 @@ class Window(Adw.ApplicationWindow):
         if item.source == 'repo':
             def show(result):
                 if isinstance(result, Exception):
-                    self.toast(f'Не удалось рассчитать установку: {result}')
+                    self.toast(tr('ask_new_install.ne_udalos_rasschitat_ustanovku', result=result))
                     return
                 targets, others, new = result
                 if others:
-                    ask = Adw.AlertDialog(heading='Сначала обновить систему',
-                                          body=f'{name} нужны более новые общие пакеты: '
+                    ask = Adw.AlertDialog(heading=tr('ask_new_install.snachala_obnovit_sistemu'),
+                                          body=tr('ask_new_install.nuzhny_bolee_novye_obschie', name=name)
                                                + ', '.join(f'{t.name} {t.version}' for t in others[:8])
-                                               + '. Отдельно их не обновить, поэтому установка пойдёт вместе с обновлением всей системы.')
-                    ask.add_response('cancel', 'Отмена')
-                    ask.add_response('go', 'Обновить и установить')
+                                               + tr('ask_new_install.otdelno_ih_ne_obnovit'))
+                    ask.add_response('cancel', tr('ask_new_install.otmena'))
+                    ask.add_response('go', tr('ask_new_install.obnovit_i_ustanovit'))
                     ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
                     ask.set_default_response('cancel')
                     ask.connect('response', lambda _d, resp: resp == 'go' and self.run_op(
-                        f'Установка {name}', kernels.install_command([item.name])))
+                        tr('ask_new_install.ustanovka', name=name), kernels.install_command([item.name])))
                     ask.present(self)
                     return
                 deps = [t for t in new if t.name != item.name]
-                body = f'Поставится {item.name} {item.version}'
+                body = tr('ask_new_install.postavitsya', name=item.name, version=item.version)
                 if deps:
-                    body += ' и нужные ему пакеты: ' + ', '.join(t.name for t in deps[:12]) + (' и другие' if len(deps) > 12 else '')
-                body += '. Общие пакеты системы не меняются.'
-                ask = Adw.AlertDialog(heading=f'Установить {name}?', body=body)
-                ask.add_response('cancel', 'Отмена')
-                ask.add_response('go', 'Установить')
+                    body += tr('ask_new_install.i_nuzhnye_emu_pakety') + ', '.join(t.name for t in deps[:12]) + (tr('ask_new_install.i_drugie') if len(deps) > 12 else '')
+                body += tr('ask_new_install.obschie_pakety_sistemy_ne')
+                ask = Adw.AlertDialog(heading=tr('ask_new_install.ustanovit_2', name=name), body=body)
+                ask.add_response('cancel', tr('ask_new_install.otmena'))
+                ask.add_response('go', tr('ask_new_install.ustanovit'))
                 ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
                 ask.set_default_response('cancel')
                 urls = [t.url for t in new]
                 ask.connect('response', lambda _d, resp: resp == 'go' and self.run_op(
-                    f'Установка {name}', search.repo_install_command(urls, [t.name for t in deps])))
+                    tr('ask_new_install.ustanovka', name=name), search.repo_install_command(urls, [t.name for t in deps])))
                 ask.present(self)
             background(lambda: pacman.single_update_plan([item.name], self.snap.packages, dbpath=search.repo_db()), show)
             return
         if item.source == 'aur':
             if not aur.available():
-                self.toast('Для пакетов AUR нужен paru')
+                self.toast(tr('ask_new_install.dlya_paketov_aur_nuzhen'))
                 return
-            ask = Adw.AlertDialog(heading=f'Собрать и установить {name}?',
-                                  body='Пакеты AUR выкладывают сами пользователи, Arch их не проверяет. Если сомневаетесь, '
-                                       'сначала откройте PKGBUILD: там видно, что и откуда будет скачано. Сборка идёт на этом '
-                                       'компьютере и может занять время.')
-            ask.add_response('cancel', 'Отмена')
-            ask.add_response('pkgbuild', 'Открыть PKGBUILD')
-            ask.add_response('go', 'Собрать и установить')
+            ask = Adw.AlertDialog(heading=tr('ask_new_install.sobrat_i_ustanovit_2', name=name),
+                                  body=tr('ask_new_install.pakety_aur_vykladyvayut_sami'))
+            ask.add_response('cancel', tr('ask_new_install.otmena'))
+            ask.add_response('pkgbuild', tr('ask_new_install.otkryt_pkgbuild'))
+            ask.add_response('go', tr('ask_new_install.sobrat_i_ustanovit'))
             ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
             ask.set_default_response('cancel')
             base = item.data.get('PackageBase', item.name)
@@ -969,18 +968,18 @@ class Window(Adw.ApplicationWindow):
                 if resp == 'pkgbuild':
                     Gtk.UriLauncher(uri=f'https://aur.archlinux.org/cgit/aur.git/tree/PKGBUILD?h={base}').launch(self, None, None)
                 elif resp == 'go':
-                    self.run_op(f'Установка {name}', search.aur_install_command(item.name))
+                    self.run_op(tr('ask_new_install.ustanovka', name=name), search.aur_install_command(item.name))
             ask.connect('response', answer)
             ask.present(self)
             return
-        ask = Adw.AlertDialog(heading=f'Установить {name}?',
-                              body=f'Приложение поставится из {"Flathub" if item.repo == "flathub" else item.repo}; нужные ему среды скачаются вместе с ним.')
-        ask.add_response('cancel', 'Отмена')
-        ask.add_response('go', 'Установить')
+        ask = Adw.AlertDialog(heading=tr('ask_new_install.ustanovit_2', name=name),
+                              body=tr('ask_new_install.prilozhenie_postavitsya_iz_nuzhnye', source="Flathub" if item.repo == "flathub" else item.repo))
+        ask.add_response('cancel', tr('ask_new_install.otmena'))
+        ask.add_response('go', tr('ask_new_install.ustanovit'))
         ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
         ask.set_default_response('cancel')
         ask.connect('response', lambda _d, resp: resp == 'go' and self.run_op(
-            f'Установка {name}', search.flatpak_install_command(item), pacman_lock=False))
+            tr('ask_new_install.ustanovka', name=name), search.flatpak_install_command(item), pacman_lock=False))
         ask.present(self)
 
     # Новости
@@ -991,24 +990,23 @@ class Window(Adw.ApplicationWindow):
         self.news_translate = can and translate.load_settings().get('translate_news', True)
         if can:
             options = Adw.PreferencesGroup()
-            switch = Adw.SwitchRow(title='Переводить на русский', active=self.news_translate,
-                                   subtitle='машинный перевод через translate-shell; команды, версии и имена пакетов не переводятся')
+            switch = Adw.SwitchRow(title=tr('build_news.perevodit_na_russkiy'), active=self.news_translate,
+                                   subtitle=tr('build_news.mashinnyy_perevod_cherez_translate'))
             switch.connect('notify::active', self.on_news_translate)
             options.add(switch)
             page.add(options)
-        desc = ('Сохранены все новости, которые программа видела, вместе с переводами; за свежей лентой она ходит не чаще '
-                'раза в полчаса.' if self.snap.news_fresh else 'Сеть недоступна: показаны сохранённые новости.')
-        group = Adw.PreferencesGroup(title='Новости Arch Linux', description=desc)
+        desc = (tr('build_news.sohraneny_vse_novosti_kotorye') if self.snap.news_fresh else tr('build_news.set_nedostupna_pokazany_sohranennye'))
+        group = Adw.PreferencesGroup(title=tr('build_news.novosti_arch_linux'), description=desc)
         page.add(group)
         if not self.snap.news:
-            group.add(row('Новостей нет', 'лента не загрузилась и сохранённой копии нет'))
+            group.add(row(tr('build_news.novostey_net'), tr('build_news.lenta_ne_zagruzilas_i')))
             return page
         self.news_rows = []
         for item in self.snap.news[:30]:
             title = (item.title_ru or translate.cached(item.title) if self.news_translate else None) or item.title
             r = row(title, _date(item.date), activatable=True)
             if item.touches:
-                r.add_suffix(pill('касается: ' + ', '.join(item.touches[:3]), 'warn'))
+                r.add_suffix(pill(tr('build_news.kasaetsya') + ', '.join(item.touches[:3]), 'warn'))
             r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
             r.connect('activated', lambda _r, it=item: self.show_news(it))
             group.add(r)
@@ -1046,7 +1044,7 @@ class Window(Adw.ApplicationWindow):
     def show_news(self, item):
         """Новость страницей во всё окно: перевод или оригинал, кого из пакетов касается, ссылка на сайт."""
         page = WidePage()
-        nav_page = self.detail_page('Новость Arch', page)
+        nav_page = self.detail_page(tr('show_news.novost_arch'), page)
         can = translate.available()
         head = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_bottom=6)
         title = Gtk.Label(label=item.title, xalign=0, wrap=True)
@@ -1057,13 +1055,13 @@ class Window(Adw.ApplicationWindow):
         date.add_css_class('dim-label')
         meta.append(date)
         if item.touches:
-            meta.append(pill('касается ваших обновлений: ' + ', '.join(item.touches[:4]), 'warn'))
+            meta.append(pill(tr('show_news.kasaetsya_vashih_obnovleniy') + ', '.join(item.touches[:4]), 'warn'))
         head.append(meta)
         if can:
             # Переключатель отдельной строкой: в заголовке группы он сжимался до «Перев…».
             toggle = Adw.ToggleGroup(halign=Gtk.Align.START, margin_top=6)
-            toggle.add(Adw.Toggle(label='Перевод', name='ru'))
-            toggle.add(Adw.Toggle(label='Оригинал', name='en'))
+            toggle.add(Adw.Toggle(label=tr('show_news.perevod'), name='ru'))
+            toggle.add(Adw.Toggle(label=tr('show_news.original'), name='en'))
             toggle.set_active_name('ru' if self.news_translate else 'en')
             head.append(toggle)
         top = Adw.PreferencesGroup()
@@ -1071,7 +1069,7 @@ class Window(Adw.ApplicationWindow):
         page.add(top)
 
         body_group = Adw.PreferencesGroup()
-        body_group.set_title('Текст')
+        body_group.set_title(tr('show_news.tekst'))
         body = Gtk.Label(label=item.text, xalign=0, wrap=True, selectable=True,
                          margin_top=14, margin_bottom=14, margin_start=16, margin_end=16)
         body.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
@@ -1082,7 +1080,7 @@ class Window(Adw.ApplicationWindow):
         page.add(body_group)
         if item.link:
             links = Adw.PreferencesGroup()
-            link = row('Открыть на сайте Arch', item.link, activatable=True)
+            link = row(tr('show_news.otkryt_na_sayte_arch'), item.link, activatable=True)
             link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
             link.connect('activated', lambda *_: Gtk.UriLauncher(uri=item.link).launch(self, None, None))
             links.add(link)
@@ -1100,13 +1098,13 @@ class Window(Adw.ApplicationWindow):
                 title.set_label(item.title_ru)
                 body.set_label(item.text_ru)
                 body.select_region(0, 0)
-                body_group.set_description('Машинный перевод; при сомнениях сверьтесь с оригиналом.')
+                body_group.set_description(tr('show_news.mashinnyy_perevod_pri_somneniyah'))
                 return
-            body_group.set_description('Переводим…')
+            body_group.set_description(tr('show_news.perevodim'))
 
             def done(result):
                 if isinstance(result, Exception):
-                    body_group.set_description(f'Перевод не удался: {result}. Показан оригинал.')
+                    body_group.set_description(tr('show_news.perevod_ne_udalsya_pokazan', result=result))
                     return
                 if not can or toggle.get_active_name() != 'ru':
                     return
@@ -1115,7 +1113,7 @@ class Window(Adw.ApplicationWindow):
                 title.set_label(result[0])
                 body.set_label(result[1])
                 body.select_region(0, 0)
-                body_group.set_description('Машинный перевод; при сомнениях сверьтесь с оригиналом.')
+                body_group.set_description(tr('show_news.mashinnyy_perevod_pri_somneniyah'))
             background(lambda: (translate.translate(item.title), translate.translate(item.text)), done)
 
         if can:
@@ -1127,10 +1125,10 @@ class Window(Adw.ApplicationWindow):
     def build_packages(self):
         s = self.snap
         page = Adw.PreferencesPage()
-        upd = Adw.PreferencesGroup(title='Обновления из репозиториев',
-                                   description='Ставятся только все вместе: так Arch не попадает в частичное обновление.')
+        upd = Adw.PreferencesGroup(title=tr('build_packages.obnovleniya_iz_repozitoriev'),
+                                   description=tr('build_packages.stavyatsya_tolko_vse_vmeste'))
         if s.updates:
-            button = Gtk.Button(label='Обновить всё', valign=Gtk.Align.CENTER)
+            button = Gtk.Button(label=tr('build_packages.obnovit_vse'), valign=Gtk.Align.CENTER)
             button.add_css_class('suggested-action')
             button.connect('clicked', lambda *_: self.confirm_upgrade())
             upd.set_header_suffix(button)
@@ -1138,17 +1136,16 @@ class Window(Adw.ApplicationWindow):
                 r = row(u.name, f'{u.old}  →  {u.new}', activatable=True)
                 r.add_prefix(_pkg_icon(self.icon_for(u.name), 32))
                 if u.needs_reboot:
-                    r.add_suffix(pill('перезагрузка', 'warn'))
+                    r.add_suffix(pill(tr('build_packages.perezagruzka'), 'warn'))
                 r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
                 r.connect('activated', lambda _r, n=u.name: self.show_pkg(n))
                 upd.add(r)
         else:
-            upd.add(row('Обновлений нет', s.updates_error or 'все пакеты свежие'))
+            upd.add(row(tr('build_packages.obnovleniy_net'), s.updates_error or tr('build_packages.vse_pakety_svezhie')))
         page.add(upd)
 
         self.rollback_group = Adw.PreferencesGroup(
-            title='Установленные пакеты', description='Через поиск (Ctrl+F или просто начните печатать) находится любой установленный '
-                                                      'пакет: описание, версии, история сборки, другая версия, удаление.')
+            title=tr('build_packages.ustanovlennye_pakety'), description=tr('build_packages.cherez_poisk_ctrl_f'))
         self.rollback_rows = []
         self.fill_rollback()
         page.add(self.rollback_group)
@@ -1167,18 +1164,18 @@ class Window(Adw.ApplicationWindow):
         candidates = sorted((p for p in self.snap.packages.values() if p.name not in foreign and (p.cached if not q else q in p.name.lower())),
                             key=lambda p: (not p.name.lower().startswith(q), p.name))
         for pkg in candidates[:ROLLBACK_ROWS]:
-            r = row(pkg.name, f'установлена {pkg.version} · в кэше версий: {len(pkg.cached)}', activatable=True)
+            r = row(pkg.name, tr('fill_rollback.ustanovlena_v_keshe_versiy', version=pkg.version, count=len(pkg.cached)), activatable=True)
             r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
             r.add_prefix(_pkg_icon(self.icon_for(pkg.name), 32))
             r.connect('activated', lambda _r, name=pkg.name: self.show_pkg(name))
             self.rollback_group.add(r)
             self.rollback_rows.append(r)
         if len(candidates) > ROLLBACK_ROWS:
-            r = row(f'Ещё {len(candidates) - ROLLBACK_ROWS}', 'уточните поиск')
+            r = row(tr('fill_rollback.esche', count=len(candidates) - ROLLBACK_ROWS), tr('fill_rollback.utochnite_poisk'))
             self.rollback_group.add(r)
             self.rollback_rows.append(r)
         if not candidates:
-            r = row('Ничего не найдено', 'без поиска показаны пакеты с прошлыми версиями в кэше; введите имя, чтобы найти любой')
+            r = row(tr('fill_rollback.nichego_ne_naydeno'), tr('fill_rollback.bez_poiska_pokazany_pakety'))
             self.rollback_group.add(r)
             self.rollback_rows.append(r)
 
@@ -1193,17 +1190,17 @@ class Window(Adw.ApplicationWindow):
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         choose = Adw.PreferencesGroup()
-        labels = [v + ('  (новее установленной)' if pacman.vercmp(v, pkg.version) > 0 else '') for v in versions]
-        versions_row = Adw.ComboRow(title='Версия', model=Gtk.StringList.new(labels))
+        labels = [v + (tr('ask_rollback.novee_ustanovlennoy') if pacman.vercmp(v, pkg.version) > 0 else '') for v in versions]
+        versions_row = Adw.ComboRow(title=tr('ask_rollback.versiya'), model=Gtk.StringList.new(labels))
         choose.add(versions_row)
         box.append(choose)
-        together = Adw.PreferencesGroup(title='Откатятся вместе' if len(group) > 1 else '')
+        together = Adw.PreferencesGroup(title=tr('ask_rollback.otkatyatsya_vmeste') if len(group) > 1 else '')
         box.append(together)
 
-        dialog = Adw.AlertDialog(heading=f'Другая версия {name}', body=f'Сейчас установлена {pkg.version}.')
+        dialog = Adw.AlertDialog(heading=tr('ask_rollback.drugaya_versiya', name=name), body=tr('ask_rollback.seychas_ustanovlena', version=pkg.version))
         dialog.set_extra_child(box)
-        dialog.add_response('cancel', 'Отмена')
-        dialog.add_response('rollback', 'Поставить')
+        dialog.add_response('cancel', tr('ask_rollback.otmena'))
+        dialog.add_response('rollback', tr('ask_rollback.postavit'))
         dialog.set_response_appearance('rollback', Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response('cancel')
 
@@ -1218,21 +1215,21 @@ class Window(Adw.ApplicationWindow):
             missing = [n for n, f in files.items() if f is None]
             if len(group) > 1:
                 for n in group:
-                    r = row(n, f'{s.packages[n].version}  →  {version}' if files[n] else 'этой версии в кэше нет')
+                    r = row(n, f'{s.packages[n].version}  →  {version}' if files[n] else tr('ask_rollback.etoy_versii_v_keshe'))
                     if not files[n]:
-                        r.add_suffix(pill('нет в кэше', 'warn'))
+                        r.add_suffix(pill(tr('ask_rollback.net_v_keshe'), 'warn'))
                     together.add(r)
                     shown.append(r)
             dialog.set_response_enabled('rollback', not missing)
-            dialog.set_body(f'Сейчас установлена {pkg.version}.' + (
-                ' Не у всех связанных пакетов эта версия есть в кэше: откат по одному сломал бы систему.' if missing else ''))
+            dialog.set_body(tr('ask_rollback.seychas_ustanovlena', version=pkg.version) + (
+                tr('ask_rollback.ne_u_vseh_svyazannyh') if missing else ''))
             dialog.files = [f for f in files.values() if f]
             dialog.version = version
 
         versions_row.connect('notify::selected', update_group)
         update_group()
         dialog.connect('response', lambda d, resp: resp == 'rollback' and self.run_op(
-            f'{name}: установка {d.version}', ops.install_files_command(d.files)))
+            tr('ask_rollback.ustanovka', name=name, version=d.version), ops.install_files_command(d.files)))
         dialog.present(self)
 
     # AUR
@@ -1241,29 +1238,27 @@ class Window(Adw.ApplicationWindow):
         s = self.snap
         page = Adw.PreferencesPage()
         if not aur.available():
-            page.add(_note_group('paru не установлен', 'вкладка AUR работает через paru'))
+            page.add(_note_group(tr('build_aur.paru_ne_ustanovlen'), tr('build_aur.vkladka_aur_rabotaet_cherez')))
             return page
-        upd = Adw.PreferencesGroup(title='Обновления AUR',
-                                   description='Пакеты собираются на этом компьютере. Перед обновлением загляните в изменения PKGBUILD на сайте AUR: '
-                                               'отсюда сборка идёт без просмотра.')
+        upd = Adw.PreferencesGroup(title=tr('build_aur.obnovleniya_aur'),
+                                   description=tr('build_aur.pakety_sobirayutsya_na_etom'))
         if s.aur_updates:
-            button = Gtk.Button(label='Обновить AUR', valign=Gtk.Align.CENTER)
+            button = Gtk.Button(label=tr('build_aur.obnovit_aur'), valign=Gtk.Align.CENTER)
             button.add_css_class('suggested-action')
             button.connect('clicked', lambda *_: self.confirm_aur())
             upd.set_header_suffix(button)
             for u in s.aur_updates:
                 upd.add(self.aur_row(u.name, f'{u.old}  →  {u.new}'))
         else:
-            upd.add(row('Обновлений нет', s.aur_error or 'все пакеты из AUR свежие'))
+            upd.add(row(tr('build_aur.obnovleniy_net'), s.aur_error or tr('build_aur.vse_pakety_iz_aur')))
         page.add(upd)
 
-        group = Adw.PreferencesGroup(title='Пакеты не из репозиториев',
-                                     description='AUR и пакеты из отключённых репозиториев. Выберите пакет: описание, изменения PKGBUILD, обновление, '
-                                                 'другая версия и удаление.')
+        group = Adw.PreferencesGroup(title=tr('build_aur.pakety_ne_iz_repozitoriev'),
+                                     description=tr('build_aur.aur_i_pakety_iz'))
         for name, version in sorted(s.foreign.items()):
             pkg = s.packages.get(name)
             older = pkg.cached if pkg else []
-            group.add(self.aur_row(name, version + (f' · других версий: {len(older)}' if older else '')))
+            group.add(self.aur_row(name, version + (tr('build_aur.drugih_versiy', count=len(older)) if older else '')))
         page.add(group)
         return page
 
@@ -1276,7 +1271,7 @@ class Window(Adw.ApplicationWindow):
         r = row(name, subtitle, activatable=True)
         r.add_prefix(_pkg_icon(self.icon_for(name), 32))
         if any(u.name == name for u in self.snap.aur_updates):
-            r.add_suffix(pill('есть обновление', 'info'))
+            r.add_suffix(pill(tr('aur_row.est_obnovlenie'), 'info'))
         r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
         r.connect('activated', lambda _r: self.show_aur(name))
         return r
@@ -1306,17 +1301,17 @@ class Window(Adw.ApplicationWindow):
         head.append(text)
         buttons = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER)
         if update:
-            b = Gtk.Button(label=f'Обновить до {update.new}')
+            b = Gtk.Button(label=tr('show_aur.obnovit_do', new=update.new))
             b.add_css_class('suggested-action')
             b.add_css_class('pill')
             b.connect('clicked', lambda *_: self.confirm_aur_one(dialog, update))
             buttons.append(b)
         if pkg and pkg.cached:
-            b = Gtk.Button(label='Другая версия…')
+            b = Gtk.Button(label=tr('show_aur.drugaya_versiya'))
             b.add_css_class('pill')
             b.connect('clicked', lambda *_: self.ask_rollback(name))
             buttons.append(b)
-        b = Gtk.Button(label='Удалить')
+        b = Gtk.Button(label=tr('show_aur.udalit'))
         b.add_css_class('destructive-action')
         b.add_css_class('pill')
         b.connect('clicked', lambda *_: self.confirm_pkg_remove(dialog, name))
@@ -1330,32 +1325,32 @@ class Window(Adw.ApplicationWindow):
         if meta and meta.screenshots:
             page.add(_screenshots(meta.screenshots))
 
-        aur_group = Adw.PreferencesGroup(title='В AUR')
-        aur_wait = row('Загружаем сведения AUR…')
+        aur_group = Adw.PreferencesGroup(title=tr('show_aur.v_aur'))
+        aur_wait = row(tr('show_aur.zagruzhaem_svedeniya_aur'))
         aur_group.add(aur_wait)
         page.add(aur_group)
-        log_group = Adw.PreferencesGroup(title='Изменения PKGBUILD', description='Последние правки сборочного сценария в AUR, сверху новые.')
-        log_wait = row('Загружаем историю…')
+        log_group = Adw.PreferencesGroup(title=tr('show_aur.izmeneniya_pkgbuild'), description=tr('show_aur.poslednie_pravki_sborochnogo_stsenariya'))
+        log_wait = row(tr('show_aur.zagruzhaem_istoriyu'))
         log_group.add(log_wait)
         page.add(log_group)
 
         description = meta.description if meta and meta.description else ''
         if description:
-            about = Adw.PreferencesGroup(title='Описание')
+            about = Adw.PreferencesGroup(title=tr('show_aur.opisanie'))
             label = Gtk.Label(label=description, wrap=True, xalign=0, selectable=True)
             label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
             about.add(label)
             page.add(about)
 
-        details = Adw.PreferencesGroup(title='Подробно')
-        details.add(row('Установлена версия', local.get('Version', s.foreign.get(name, ''))))
-        for key, title_ in (('Installed Size', 'Размер'), ('Install Date', 'Установлен'), ('Install Reason', 'Причина установки'),
-                            ('Licenses', 'Лицензия'), ('Depends On', 'Зависимости')):
+        details = Adw.PreferencesGroup(title=tr('show_aur.podrobno'))
+        details.add(row(tr('show_aur.ustanovlena_versiya'), local.get('Version', s.foreign.get(name, ''))))
+        for key, title_ in (('Installed Size', tr('show_aur.razmer')), ('Install Date', tr('show_aur.ustanovlen')), ('Install Reason', tr('show_aur.prichina_ustanovki')),
+                            ('Licenses', tr('show_aur.litsenziya')), ('Depends On', tr('show_aur.zavisimosti'))):
             if local.get(key) and local[key] != 'None':
-                value = {'Explicitly installed': 'установлен вами', 'Installed as a dependency for another package': 'как зависимость'}.get(local[key], local[key])
+                value = {'Explicitly installed': tr('show_aur.ustanovlen_vami'), 'Installed as a dependency for another package': tr('show_aur.kak_zavisimost')}.get(local[key], local[key])
                 details.add(row(title_, value))
         if local.get('URL') and local['URL'] != 'None':
-            site = row('Сайт программы', local['URL'], activatable=True)
+            site = row(tr('show_aur.sayt_programmy'), local['URL'], activatable=True)
             site.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
             site.connect('activated', lambda *_: Gtk.UriLauncher(uri=local['URL']).launch(self, None, None))
             details.add(site)
@@ -1365,24 +1360,24 @@ class Window(Adw.ApplicationWindow):
         def show_rpc(result):
             aur_group.remove(aur_wait)
             if isinstance(result, Exception):
-                aur_group.add(row('Сведения AUR не загрузились', str(result)))
+                aur_group.add(row(tr('show_aur.svedeniya_aur_ne_zagruzilis'), str(result)))
                 return
             info = result.get(name)
             if not info:
-                aur_group.add(row('Этого пакета нет в AUR', 'он из отключённого репозитория или собран вручную'))
+                aur_group.add(row(tr('show_aur.etogo_paketa_net_v'), tr('show_aur.on_iz_otklyuchennogo_repozitoriya')))
                 log_group.set_visible(False)
                 return
             if info.get('OutOfDate'):
-                r = row('Помечен как устаревший', 'сопровождающему сообщили, что вышла новая версия программы')
-                r.add_suffix(pill('устарел', 'warn'))
+                r = row(tr('show_aur.pomechen_kak_ustarevshiy'), tr('show_aur.soprovozhdayuschemu_soobschili_chto_vyshla'))
+                r.add_suffix(pill(tr('show_aur.ustarel'), 'warn'))
                 aur_group.add(r)
-            aur_group.add(row('Версия в AUR', info.get('Version', '')))
-            aur_group.add(row('Сопровождающий', info.get('Maintainer') or 'нет: пакет брошен, его может подхватить кто угодно'))
-            aur_group.add(row('Голоса и популярность', f'{info.get("NumVotes", 0)} голосов · популярность {info.get("Popularity", 0):.2f}'))
+            aur_group.add(row(tr('show_aur.versiya_v_aur'), info.get('Version', '')))
+            aur_group.add(row(tr('show_aur.soprovozhdayuschiy'), info.get('Maintainer') or tr('show_aur.net_paket_broshen_ego')))
+            aur_group.add(row(tr('show_aur.golosa_i_populyarnost'), tr('show_aur.golosov_populyarnost', votes=info.get("NumVotes", 0), popularity=f'{info.get("Popularity", 0):.2f}')))
             if info.get('LastModified'):
-                aur_group.add(row('Последнее изменение', datetime.fromtimestamp(info['LastModified']).strftime('%d.%m.%Y')))
+                aur_group.add(row(tr('show_aur.poslednee_izmenenie'), datetime.fromtimestamp(info['LastModified']).strftime('%d.%m.%Y')))
             page_url = f'https://aur.archlinux.org/packages/{info.get("Name", name)}'
-            link = row('Страница в AUR', page_url, activatable=True)
+            link = row(tr('show_aur.stranitsa_v_aur'), page_url, activatable=True)
             link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
             link.connect('activated', lambda *_: Gtk.UriLauncher(uri=page_url).launch(self, None, None))
             aur_group.add(link)
@@ -1392,19 +1387,18 @@ class Window(Adw.ApplicationWindow):
         def show_log(result, base):
             log_group.remove(log_wait)
             if isinstance(result, Exception) or not result:
-                log_group.add(row('История не загрузилась', str(result) if isinstance(result, Exception) else 'записей нет'))
+                log_group.add(row(tr('show_aur.istoriya_ne_zagruzilas'), str(result) if isinstance(result, Exception) else tr('show_aur.zapisey_net')))
                 return
-            log_group.set_description('Правки сборочного сценария в AUR, сверху новые. Выберите правку, чтобы собрать и поставить '
-                                      'ту версию; кнопка справа открывает правку на сайте.')
+            log_group.set_description(tr('show_aur.pravki_sborochnogo_stsenariya_v'))
             entries = result[:16]
             for i, (title_, date, note, href) in enumerate(entries[:15]):
                 commit = aur.commit_of(href)
                 prev = aur.commit_of(entries[i + 1][3]) if i + 1 < len(entries) else None
                 r = row(title_, f'{date}' + (f' · {note}' if note else ''), activatable=bool(commit))
                 if i == 0:
-                    r.add_suffix(pill('новейшая', 'info'))
+                    r.add_suffix(pill(tr('show_aur.noveyshaya'), 'info'))
                 if href:
-                    site = Gtk.Button(icon_name='adw-external-link-symbolic', valign=Gtk.Align.CENTER, tooltip_text='Открыть правку на сайте AUR')
+                    site = Gtk.Button(icon_name='adw-external-link-symbolic', valign=Gtk.Align.CENTER, tooltip_text=tr('show_aur.otkryt_pravku_na_sayte'))
                     site.add_css_class('flat')
                     site.connect('clicked', lambda _b, u=href.replace('http://', 'https://'): Gtk.UriLauncher(uri=u).launch(self, None, None))
                     r.add_suffix(site)
@@ -1443,7 +1437,7 @@ class Window(Adw.ApplicationWindow):
         files = self.snap.foreign_files.get(name, [])
         local_url = aur.local_info(name).get('URL', '')
         page = WidePage()
-        nav_page = self.detail_page(f'{name}: правка от {date}', page)
+        nav_page = self.detail_page(tr('confirm_aur_build.pravka_ot', name=name, date=date), page)
 
         head = Gtk.Box(spacing=18, margin_bottom=6)
         head.append(_pkg_icon(self.icon_for(name, files), 72))
@@ -1451,24 +1445,24 @@ class Window(Adw.ApplicationWindow):
         heading = Gtk.Label(label=name, xalign=0, wrap=True)
         heading.add_css_class('title-1')
         text.append(heading)
-        sub = Gtk.Label(label=f'Правка от {date}: «{title}»', xalign=0, wrap=True)
+        sub = Gtk.Label(label=tr('confirm_aur_build.pravka_ot_2', date=date, title=title), xalign=0, wrap=True)
         sub.add_css_class('dim-label')
         text.append(sub)
         head.append(text)
-        go = Gtk.Button(label='Собрать и поставить', valign=Gtk.Align.CENTER, sensitive=False)
+        go = Gtk.Button(label=tr('confirm_aur_build.sobrat_i_postavit'), valign=Gtk.Align.CENTER, sensitive=False)
         go.add_css_class('suggested-action')
         go.add_css_class('pill')
         installed = set(self.snap.packages)
         go.connect('clicked', lambda *_: (self.run_op(
-            f'Сборка {name} ({date})', aur.build_commands(base, commit, installed))))
+            tr('confirm_aur_build.sborka', name=name, date=date), aur.build_commands(base, commit, installed))))
         head.append(go)
         self.set_anchor(nav_page, go)
         top = Adw.PreferencesGroup()
         top.add(head)
         page.add(top)
 
-        program = Adw.PreferencesGroup(title='Что изменилось в программе')
-        changes = Gtk.Label(label='Ищем примечания к выпуску…', xalign=0, wrap=True, selectable=True,
+        program = Adw.PreferencesGroup(title=tr('confirm_aur_build.chto_izmenilos_v_programme'))
+        changes = Gtk.Label(label=tr('confirm_aur_build.ischem_primechaniya_k_vypusku'), xalign=0, wrap=True, selectable=True,
                             margin_top=14, margin_bottom=14, margin_start=16, margin_end=16)
         changes.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
         # Текст лежит в своей карточке: строки-ссылки группа ставит списком выше прочего, поэтому они в отдельной группе ниже.
@@ -1479,37 +1473,35 @@ class Window(Adw.ApplicationWindow):
         page.add(program)
         links = Adw.PreferencesGroup(visible=False)
         page.add(links)
-        build = Adw.PreferencesGroup(title='Что изменилось в сборке', description='Против прошлой правки PKGBUILD.')
+        build = Adw.PreferencesGroup(title=tr('confirm_aur_build.chto_izmenilos_v_sborke'), description=tr('confirm_aur_build.protiv_proshloy_pravki_pkgbuild'))
         page.add(build)
         build.set_visible(False)
-        about = Adw.PreferencesGroup(title='Перед сборкой')
-        about.add(row('Как это пройдёт', 'PKGBUILD этой правки скачается из AUR, пакет соберётся на этом компьютере и встанет вместо '
-                                         'нынешнего; установку подтвердите паролем. Ход сборки будет виден в окне.'))
-        about.add(row('Если не соберётся', 'старые версии иногда не собираются: файлы программы могли пропасть с сайта автора. '
-                                           'Тогда система не изменится.'))
-        about.add(row('Потом', 'кнопка «Обновить AUR» снова поставит новейшую версию.'))
+        about = Adw.PreferencesGroup(title=tr('confirm_aur_build.pered_sborkoy'))
+        about.add(row(tr('confirm_aur_build.kak_eto_proydet'), tr('confirm_aur_build.pkgbuild_etoy_pravki_skachaetsya')))
+        about.add(row(tr('confirm_aur_build.esli_ne_soberetsya'), tr('confirm_aur_build.starye_versii_inogda_ne')))
+        about.add(row(tr('confirm_aur_build.potom'), tr('confirm_aur_build.knopka_obnovit_aur_snova')))
         page.add(about)
         self.push_page(nav_page)
 
         def show(result):
             go.set_sensitive(True)
             if isinstance(result, Exception):
-                changes.set_label(f'Примечания не загрузились: {result}')
+                changes.set_label(tr('confirm_aur_build.primechaniya_ne_zagruzilis', result=result))
                 return
             heading.set_label(f'{name} {result.version}')
             if result.text:
                 set_markup_or_text(changes, markdown_markup(result.text), result.text)
-                program.set_description('Источник: ' + result.source)
+                program.set_description(tr('confirm_aur_build.istochnik') + result.source)
                 if result.link:
-                    link = row('Открыть источник', result.link, activatable=True)
+                    link = row(tr('confirm_aur_build.otkryt_istochnik'), result.link, activatable=True)
                     link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
                     link.connect('activated', lambda *_: Gtk.UriLauncher(uri=result.link).launch(self, None, None))
                     links.add(link)
                     links.set_visible(True)
             else:
-                changes.set_label('Примечаний к этой версии не нашлось: ни у самой программы, ни на Flathub, ни в выпусках GitHub.')
+                changes.set_label(tr('confirm_aur_build.primechaniy_k_etoy_versii'))
                 if local_url and local_url != 'None':
-                    link = row('Сайт программы', local_url, activatable=True)
+                    link = row(tr('confirm_aur_build.sayt_programmy'), local_url, activatable=True)
                     link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
                     link.connect('activated', lambda *_: Gtk.UriLauncher(uri=local_url).launch(self, None, None))
                     links.add(link)
@@ -1522,41 +1514,39 @@ class Window(Adw.ApplicationWindow):
         background(lambda: notes.collect(name, base, commit, prev, local_url, aur.metainfo_file(files)), show)
 
     def confirm_aur_one(self, parent, update):
-        ask = Adw.AlertDialog(heading=f'Обновить {update.name}?',
-                              body=f'{update.old} → {update.new}. Пакет соберётся на этом компьютере без просмотра PKGBUILD; '
-                                   'установку подтвердите паролем.')
-        ask.add_response('cancel', 'Отмена')
-        ask.add_response('go', 'Собрать и установить')
+        ask = Adw.AlertDialog(heading=tr('confirm_aur_one.obnovit', name=update.name),
+                              body=tr('confirm_aur_one.paket_soberetsya_na_etom', old=update.old, new=update.new))
+        ask.add_response('cancel', tr('confirm_aur_one.otmena'))
+        ask.add_response('go', tr('confirm_aur_one.sobrat_i_ustanovit'))
         ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
         ask.set_default_response('cancel')
         ask.connect('response', lambda _d, resp: resp == 'go' and (self.close_detail(parent), self.run_op(
-            f'Обновление {update.name}', aur.update_one_command(update.name))))
+            tr('confirm_aur_one.obnovlenie', name=update.name), aur.update_one_command(update.name))))
         ask.present(self)
 
     def confirm_pkg_remove(self, parent, name):
         group = Adw.PreferencesGroup()
-        deps = Adw.SwitchRow(title='Убрать ненужные зависимости', subtitle='пакеты, поставленные только ради этого и больше никому не нужные',
+        deps = Adw.SwitchRow(title=tr('confirm_pkg_remove.ubrat_nenuzhnye_zavisimosti'), subtitle=tr('confirm_pkg_remove.pakety_postavlennye_tolko_radi'),
                              active=True)
         group.add(deps)
-        ask = Adw.AlertDialog(heading=f'Удалить {name}?', body='Пакет удалится из системы; настройки в домашней папке останутся.')
+        ask = Adw.AlertDialog(heading=tr('confirm_pkg_remove.udalit_2', name=name), body=tr('confirm_pkg_remove.paket_udalitsya_iz_sistemy'))
         ask.set_extra_child(group)
-        ask.add_response('cancel', 'Отмена')
-        ask.add_response('go', 'Удалить')
+        ask.add_response('cancel', tr('confirm_pkg_remove.otmena'))
+        ask.add_response('go', tr('confirm_pkg_remove.udalit'))
         ask.set_response_appearance('go', Adw.ResponseAppearance.DESTRUCTIVE)
         ask.set_default_response('cancel')
         ask.connect('response', lambda _d, resp: resp == 'go' and (self.close_detail(parent), self.run_op(
-            f'Удаление {name}', aur.remove_command(name, deps.get_active()))))
+            tr('confirm_pkg_remove.udalenie', name=name), aur.remove_command(name, deps.get_active()))))
         ask.present(self)
 
     def confirm_aur(self):
         names = ', '.join(u.name for u in self.snap.aur_updates[:6])
-        dialog = Adw.AlertDialog(heading='Обновить пакеты AUR?',
-                                 body=f'Будут собраны и установлены: {names}. Сборка идёт без просмотра PKGBUILD; '
-                                      'установку подтвердите паролем, окно может появиться несколько раз.')
-        dialog.add_response('cancel', 'Отмена')
-        dialog.add_response('go', 'Собрать и установить')
+        dialog = Adw.AlertDialog(heading=tr('confirm_aur.obnovit_pakety_aur'),
+                                 body=tr('confirm_aur.budut_sobrany_i_ustanovleny', names=names))
+        dialog.add_response('cancel', tr('confirm_aur.otmena'))
+        dialog.add_response('go', tr('confirm_aur.sobrat_i_ustanovit'))
         dialog.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
-        dialog.connect('response', lambda _d, resp: resp == 'go' and self.run_op('Обновление AUR', aur.upgrade_command()))
+        dialog.connect('response', lambda _d, resp: resp == 'go' and self.run_op(tr('confirm_aur.obnovlenie_aur'), aur.upgrade_command()))
         dialog.present(self)
 
     # Flatpak
@@ -1565,26 +1555,26 @@ class Window(Adw.ApplicationWindow):
         s = self.snap
         page = Adw.PreferencesPage()
         if not flatpak.available():
-            page.add(_note_group('Flatpak не установлен', ''))
+            page.add(_note_group(tr('build_flatpak.flatpak_ne_ustanovlen'), ''))
             return page
         new = [a for a in s.flatpaks if a.new_version]
-        upd = Adw.PreferencesGroup(title='Обновления Flatpak')
+        upd = Adw.PreferencesGroup(title=tr('build_flatpak.obnovleniya_flatpak'))
         if new:
-            button = Gtk.Button(label='Обновить всё', valign=Gtk.Align.CENTER)
+            button = Gtk.Button(label=tr('build_flatpak.obnovit_vse'), valign=Gtk.Align.CENTER)
             button.add_css_class('suggested-action')
-            button.connect('clicked', lambda *_: self.run_op('Обновление Flatpak', flatpak.upgrade_command(), pacman_lock=False))
+            button.connect('clicked', lambda *_: self.run_op(tr('build_flatpak.obnovlenie_flatpak'), flatpak.upgrade_command(), pacman_lock=False))
             upd.set_header_suffix(button)
             for a in new:
                 upd.add(self.app_row(a, f'{a.version or "?"}  →  {a.new_version}'))
         else:
-            upd.add(row('Обновлений нет', s.flatpak_error or 'все приложения свежие'))
+            upd.add(row(tr('build_flatpak.obnovleniy_net'), s.flatpak_error or tr('build_flatpak.vse_prilozheniya_svezhie')))
         page.add(upd)
 
-        group = Adw.PreferencesGroup(title='Приложения', description='Выберите приложение: описание, снимки, что нового, обновление и прошлые сборки.')
+        group = Adw.PreferencesGroup(title=tr('build_flatpak.prilozheniya'), description=tr('build_flatpak.vyberite_prilozhenie_opisanie_snimki'))
         for a in sorted(s.flatpaks, key=lambda a: self.app_name(a).lower()):
-            group.add(self.app_row(a, f'{a.version or "без номера версии"} · {a.origin} · {a.installation}'))
+            group.add(self.app_row(a, f'{a.version or tr("build_flatpak.bez_nomera_versii")} · {a.origin} · {a.installation}'))
         if not s.flatpaks:
-            group.add(row('Приложений нет', s.flatpak_error or ''))
+            group.add(row(tr('build_flatpak.prilozheniy_net'), s.flatpak_error or ''))
         page.add(group)
         return page
 
@@ -1597,7 +1587,7 @@ class Window(Adw.ApplicationWindow):
         r = row(self.app_name(app), (info.summary + '\n' if info and info.summary else '') + subtitle, activatable=True)
         r.add_prefix(_icon(info, 40))
         if app.new_version:
-            r.add_suffix(pill('есть обновление', 'info'))
+            r.add_suffix(pill(tr('app_row.est_obnovlenie'), 'info'))
         r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
         r.connect('activated', lambda _r: self.show_app(app))
         return r
@@ -1622,16 +1612,16 @@ class Window(Adw.ApplicationWindow):
         head.append(text)
         buttons = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER)
         if app.new_version:
-            update = Gtk.Button(label=f'Обновить до {app.new_version}')
+            update = Gtk.Button(label=tr('show_app.obnovit_do', new_version=app.new_version))
             update.add_css_class('suggested-action')
             update.add_css_class('pill')
             update.connect('clicked', lambda *_: self.confirm_app_update(dialog, app))
             buttons.append(update)
-        builds = Gtk.Button(label='Другая сборка…')
+        builds = Gtk.Button(label=tr('show_app.drugaya_sborka'))
         builds.add_css_class('pill')
         builds.connect('clicked', lambda *_: self.ask_flatpak(app))
         buttons.append(builds)
-        remove = Gtk.Button(label='Удалить')
+        remove = Gtk.Button(label=tr('show_app.udalit'))
         remove.add_css_class('destructive-action')
         remove.add_css_class('pill')
         remove.connect('clicked', lambda *_: self.confirm_app_remove(dialog, app))
@@ -1648,10 +1638,10 @@ class Window(Adw.ApplicationWindow):
         newer = [r for r in info.releases if app.version and flatpak_newer(r.version, app.version)]
         notes = newer or info.releases[:1]
         if notes:
-            whats = Adw.PreferencesGroup(title='Что нового' if newer else f'Версия {notes[0].version}')
+            whats = Adw.PreferencesGroup(title=tr('show_app.chto_novogo') if newer else tr('show_app.versiya', version=notes[0].version))
             for rel in notes[:5]:
-                exp = expander(f'Версия {rel.version}', _release_date(rel.date), expanded=rel is notes[0])
-                body = Gtk.Label(label=rel.text or 'Описания изменений нет.', wrap=True, xalign=0, selectable=True,
+                exp = expander(tr('show_app.versiya', version=rel.version), _release_date(rel.date), expanded=rel is notes[0])
+                body = Gtk.Label(label=rel.text or tr('show_app.opisaniya_izmeneniy_net'), wrap=True, xalign=0, selectable=True,
                                  margin_top=10, margin_bottom=10, margin_start=12, margin_end=12)
                 body.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
                 exp.add_row(body)
@@ -1659,20 +1649,20 @@ class Window(Adw.ApplicationWindow):
             page.add(whats)
 
         if info.description:
-            about = Adw.PreferencesGroup(title='Описание')
+            about = Adw.PreferencesGroup(title=tr('show_app.opisanie'))
             label = Gtk.Label(label=info.description, wrap=True, xalign=0, selectable=True)
             label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
             about.add(label)
             page.add(about)
 
-        details = Adw.PreferencesGroup(title='Подробно')
-        details.add(row('Установлена версия', app.version or 'без номера версии'))
-        details.add(row('Хранилище', f'{app.origin} · установка {app.installation} · ветка {app.branch}'))
+        details = Adw.PreferencesGroup(title=tr('show_app.podrobno'))
+        details.add(row(tr('show_app.ustanovlena_versiya'), app.version or tr('show_app.bez_nomera_versii')))
+        details.add(row(tr('show_app.hranilische'), tr('show_app.ustanovka_vetka', origin=app.origin, installation=app.installation, branch=app.branch)))
         if info.license:
-            details.add(row('Лицензия', info.license))
-        details.add(row('Идентификатор', app.app_id))
+            details.add(row(tr('show_app.litsenziya'), info.license))
+        details.add(row(tr('show_app.identifikator'), app.app_id))
         if info.homepage:
-            site = row('Сайт', info.homepage, activatable=True)
+            site = row(tr('show_app.sayt'), info.homepage, activatable=True)
             site.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
             site.connect('activated', lambda *_: Gtk.UriLauncher(uri=info.homepage).launch(self, None, None))
             details.add(site)
@@ -1680,34 +1670,34 @@ class Window(Adw.ApplicationWindow):
         self.push_page(dialog)
 
     def confirm_app_update(self, parent, app):
-        ask = Adw.AlertDialog(heading=f'Обновить {self.app_name(app)}?',
-                              body=f'{app.version or "?"} → {app.new_version}. Нужные приложению среды обновятся вместе с ним.')
-        ask.add_response('cancel', 'Отмена')
-        ask.add_response('go', 'Обновить')
+        ask = Adw.AlertDialog(heading=tr('confirm_app_update.obnovit_2', app=self.app_name(app)),
+                              body=tr('confirm_app_update.nuzhnye_prilozheniyu_sredy_obnovyatsya', version=app.version or "?", new_version=app.new_version))
+        ask.add_response('cancel', tr('confirm_app_update.otmena'))
+        ask.add_response('go', tr('confirm_app_update.obnovit'))
         ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
         ask.set_default_response('cancel')
         ask.connect('response', lambda _d, resp: resp == 'go' and (self.close_detail(parent), self.run_op(
-            f'Обновление {self.app_name(app)}', flatpak.update_one_command(app), pacman_lock=False)))
+            tr('confirm_app_update.obnovlenie', app=self.app_name(app)), flatpak.update_one_command(app), pacman_lock=False)))
         ask.present(self)
 
     def confirm_app_remove(self, parent, app):
         name = self.app_name(app)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         group = Adw.PreferencesGroup()
-        data = Adw.SwitchRow(title='Удалить и данные приложения', subtitle=f'настройки и файлы в ~/.var/app/{app.app_id}')
-        unused = Adw.SwitchRow(title='Убрать ненужные среды', subtitle='среды выполнения, которыми больше не пользуется ни одно приложение',
+        data = Adw.SwitchRow(title=tr('confirm_app_remove.udalit_i_dannye_prilozheniya'), subtitle=tr('confirm_app_remove.nastroyki_i_fayly_v', app_id=app.app_id))
+        unused = Adw.SwitchRow(title=tr('confirm_app_remove.ubrat_nenuzhnye_sredy'), subtitle=tr('confirm_app_remove.sredy_vypolneniya_kotorymi_bolshe'),
                                active=True)
         group.add(data)
         group.add(unused)
         box.append(group)
-        ask = Adw.AlertDialog(heading=f'Удалить {name}?', body='Приложение пропадёт из системы. Без данных его можно поставить заново как было.')
+        ask = Adw.AlertDialog(heading=tr('confirm_app_remove.udalit_2', name=name), body=tr('confirm_app_remove.prilozhenie_propadet_iz_sistemy'))
         ask.set_extra_child(box)
-        ask.add_response('cancel', 'Отмена')
-        ask.add_response('go', 'Удалить')
+        ask.add_response('cancel', tr('confirm_app_remove.otmena'))
+        ask.add_response('go', tr('confirm_app_remove.udalit'))
         ask.set_response_appearance('go', Adw.ResponseAppearance.DESTRUCTIVE)
         ask.set_default_response('cancel')
         ask.connect('response', lambda _d, resp: resp == 'go' and (self.close_detail(parent), self.run_op(
-            f'Удаление {name}', flatpak.uninstall_commands(app, data.get_active(), unused.get_active()), pacman_lock=False)))
+            tr('confirm_app_remove.udalenie', name=name), flatpak.uninstall_commands(app, data.get_active(), unused.get_active()), pacman_lock=False)))
         ask.present(self)
 
     def ask_flatpak(self, app):
@@ -1715,22 +1705,22 @@ class Window(Adw.ApplicationWindow):
         view = Adw.ToolbarView()
         view.add_top_bar(Adw.HeaderBar())
         holder = Adw.Bin()
-        holder.set_child(Adw.StatusPage(title='Загружаем журнал сборок…', child=Adw.Spinner()))
+        holder.set_child(Adw.StatusPage(title=tr('ask_flatpak.zagruzhaem_zhurnal_sborok'), child=Adw.Spinner()))
         view.set_content(holder)
         dialog.set_child(view)
         dialog.present(self)
 
         def show(result):
             if isinstance(result, Exception):
-                holder.set_child(Adw.StatusPage(title='Журнал не загрузился', description=str(result)))
+                holder.set_child(Adw.StatusPage(title=tr('ask_flatpak.zhurnal_ne_zagruzilsya'), description=str(result)))
                 return
             commits, current = result
             page = Adw.PreferencesPage()
-            group = Adw.PreferencesGroup(title='Сборки в хранилище', description='Сверху самая новая.')
+            group = Adw.PreferencesGroup(title=tr('ask_flatpak.sborki_v_hranilische'), description=tr('ask_flatpak.sverhu_samaya_novaya'))
             for c in commits:
                 r = row(c.subject or c.commit[:12], f'{c.date} · {c.commit[:12]}', activatable=c.commit != current)
                 if c.commit == current:
-                    r.add_suffix(pill('установлена', 'ok'))
+                    r.add_suffix(pill(tr('ask_flatpak.ustanovlena'), 'ok'))
                 else:
                     r.connect('activated', lambda _r, commit=c: self.confirm_flatpak(dialog, app, commit))
                 group.add(r)
@@ -1740,14 +1730,14 @@ class Window(Adw.ApplicationWindow):
         background(lambda: (flatpak.history(app), flatpak.current_commit(app)), show)
 
     def confirm_flatpak(self, parent, app, commit):
-        ask = Adw.AlertDialog(heading=f'Поставить эту сборку {app.name}?',
-                              body=f'{commit.subject or commit.commit[:12]}\n{commit.date}\n\nМеняется только приложение, среды остаются как есть.')
-        ask.add_response('cancel', 'Отмена')
-        ask.add_response('go', 'Поставить')
+        ask = Adw.AlertDialog(heading=tr('confirm_flatpak.postavit_etu_sborku', name=app.name),
+                              body=tr('confirm_flatpak.menyaetsya_tolko_prilozhenie_sredy', subject=commit.subject or commit.commit[:12], date=commit.date))
+        ask.add_response('cancel', tr('confirm_flatpak.otmena'))
+        ask.add_response('go', tr('confirm_flatpak.postavit'))
         ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
         ask.set_default_response('cancel')
         ask.connect('response', lambda _d, resp: resp == 'go' and (self.close_detail(parent), self.run_op(
-            f'{app.name}: сборка {commit.commit[:12]}', flatpak.checkout_command(app, commit.commit), pacman_lock=False)))
+            tr('confirm_flatpak.sborka', name=app.name, commit=commit.commit[:12]), flatpak.checkout_command(app, commit.commit), pacman_lock=False)))
         ask.present(self)
 
     # Ядра
@@ -1761,51 +1751,50 @@ class Window(Adw.ApplicationWindow):
         default = kernels.default_kernel(s.boot_order, names)
         repo = {k.name: k for k in s.repo_kernels}
 
-        group = Adw.PreferencesGroup(title='Установленные ядра',
-                                     description='Основное загружается первым; остальные выбираются в меню загрузчика. '
-                                                 'Держите хотя бы одно запасное.')
+        group = Adw.PreferencesGroup(title=tr('build_kernels.ustanovlennye_yadra'),
+                                     description=tr('build_kernels.osnovnoe_zagruzhaetsya_pervym_ostalnye'))
         page.add(group)
         if not found:
-            group.add(row('Ядра не найдены', 'не удалось сопоставить пакеты ядер с /usr/lib/modules'))
+            group.add(row(tr('build_kernels.yadra_ne_naydeny'), tr('build_kernels.ne_udalos_sopostavit_pakety')))
         for k in found:
-            exp = expander(k.name, f'установлено {k.version}' + (f' · запущено {release}' if k.name == running_base else ''))
+            exp = expander(k.name, tr('build_kernels.ustanovleno', version=k.version) + (tr('build_kernels.zapuscheno', release=release) if k.name == running_base else ''))
             exp.add_prefix(_pkg_icon('computer-symbolic', 32))
             if k.name == default:
-                exp.add_suffix(pill('основное', 'info'))
+                exp.add_suffix(pill(tr('build_kernels.osnovnoe'), 'info'))
             if k.name == running_base:
-                exp.add_suffix(pill('запущено', 'ok'))
+                exp.add_suffix(pill(tr('build_kernels.zapuscheno_2'), 'ok'))
             pending = [u for u in s.updates if u.name == k.name]
             if pending:
-                exp.add_suffix(pill(f'есть {pending[0].new}', 'info'))
+                exp.add_suffix(pill(tr('build_kernels.est', new=pending[0].new), 'info'))
             missing = [m for m in (repo[k.name].modules if k.name in repo else []) if m not in s.packages]
             if missing:
-                exp.add_suffix(pill('нет модулей', 'warn'))
-                r = row('Поставить недостающие модули', f'{", ".join(missing)}: стоят у другого ядра, а у этого нет; без r8125 может не быть сети',
+                exp.add_suffix(pill(tr('build_kernels.net_moduley'), 'warn'))
+                r = row(tr('build_kernels.postavit_nedostayuschie_moduli'), tr('build_kernels.stoyat_u_drugogo_yadra', modules=", ".join(missing)),
                         activatable=True)
                 r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
                 r.connect('activated', lambda _r, ms=missing, n=k.name: self.ask_install(n, ms, modules_only=True))
                 exp.add_row(r)
             if k.name != default:
-                r = row('Сделать основным', 'это ядро будет загружаться первым; меню загрузчика пересоберётся', activatable=True)
+                r = row(tr('build_kernels.sdelat_osnovnym'), tr('build_kernels.eto_yadro_budet_zagruzhatsya'), activatable=True)
                 r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
                 r.connect('activated', lambda _r, n=k.name: self.ask_default(n))
                 exp.add_row(r)
             for c in _unique_versions(k.cached):
                 newer = pacman.vercmp(c, k.version) > 0
-                r = row(f'{"Поставить" if newer else "Откатить на"} {c}',
-                        ('новее установленной; ' if newer else '') + 'вместе с заголовками и модулями этого ядра', activatable=True)
+                r = row(tr('build_kernels.postavit', version=c) if newer else tr('build_kernels.otkatit_na', version=c),
+                        (tr('build_kernels.novee_ustanovlennoy') if newer else '') + tr('build_kernels.vmeste_s_zagolovkami_i'), activatable=True)
                 r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
                 r.connect('activated', lambda _r, name=k.name: self.ask_rollback(name))
                 exp.add_row(r)
             if not k.cached:
-                exp.add_row(row('Прошлых версий в кэше нет'))
+                exp.add_row(row(tr('build_kernels.proshlyh_versiy_v_keshe')))
             group.add(exp)
         if default is None and found:
-            group.add(row('Основное ядро не задано явно',
-                          f'BOOT_ORDER: {", ".join(s.boot_order) or "по умолчанию"}; первым идёт ядро, которое limine поставит первым по шаблону'))
+            group.add(row(tr('build_kernels.osnovnoe_yadro_ne_zadano'),
+                          tr('build_kernels.boot_order_pervym_idet', order=", ".join(s.boot_order) or tr('build_kernels.po_umolchaniyu'))))
 
-        more = Adw.PreferencesGroup(title='Доступные ядра',
-                                    description='Из подключённых репозиториев. Ставятся вместе с заголовками, модулями ваших устройств и полным обновлением системы.')
+        more = Adw.PreferencesGroup(title=tr('build_kernels.dostupnye_yadra'),
+                                    description=tr('build_kernels.iz_podklyuchennyh_repozitoriev_stavyatsya'))
         page.add(more)
         for k in s.repo_kernels:
             if k.installed:
@@ -1816,39 +1805,36 @@ class Window(Adw.ApplicationWindow):
             r.connect('activated', lambda _r, kk=k: self.ask_install(kk.name, [kk.name, kk.name + '-headers', *kk.modules]))
             more.add(r)
         if not any(not k.installed for k in s.repo_kernels):
-            more.add(row('Других ядер в репозиториях нет'))
+            more.add(row(tr('build_kernels.drugih_yader_v_repozitoriyah')))
         return page
 
     def ask_install(self, kernel, names, modules_only=False):
-        heading = f'Поставить модули для {kernel}?' if modules_only else f'Поставить ядро {kernel}?'
-        body = (f'Будут установлены: {", ".join(names)}.\n\nВместе с ними обновится вся система: '
-                f'так Arch требует при установке новых пакетов. Пункт в меню загрузчика появится сам.')
+        heading = tr('ask_install.postavit_moduli_dlya', kernel=kernel) if modules_only else tr('ask_install.postavit_yadro', kernel=kernel)
+        body = (tr('ask_install.budut_ustanovleny_vmeste_s', packages=", ".join(names)))
         dialog = Adw.AlertDialog(heading=heading, body=body)
-        dialog.add_response('cancel', 'Отмена')
-        dialog.add_response('go', 'Установить')
+        dialog.add_response('cancel', tr('ask_install.otmena'))
+        dialog.add_response('go', tr('ask_install.ustanovit'))
         dialog.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
         dialog.set_default_response('cancel')
-        dialog.connect('response', lambda _d, resp: resp == 'go' and self.run_op(f'Установка {kernel}', kernels.install_command(names)))
+        dialog.connect('response', lambda _d, resp: resp == 'go' and self.run_op(tr('ask_install.ustanovka', kernel=kernel), kernels.install_command(names)))
         dialog.present(self)
 
     def ask_default(self, kernel):
         order = kernels.new_order(self.snap.boot_order, kernel)
-        dialog = Adw.AlertDialog(heading=f'Сделать {kernel} основным?',
-                                 body=f'В /etc/default/limine станет BOOT_ORDER="{", ".join(order)}", прежние настройки сохранятся копией. '
-                                      'Потом limine-update пересоберёт меню загрузки, это займёт около минуты.')
-        dialog.add_response('cancel', 'Отмена')
-        dialog.add_response('go', 'Сделать основным')
+        dialog = Adw.AlertDialog(heading=tr('ask_default.sdelat_osnovnym_2', kernel=kernel),
+                                 body=tr('ask_default.v_etc_default_limine', order=", ".join(order)))
+        dialog.add_response('cancel', tr('ask_default.otmena'))
+        dialog.add_response('go', tr('ask_default.sdelat_osnovnym'))
         dialog.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
         dialog.set_default_response('cancel')
-        dialog.connect('response', lambda _d, resp: resp == 'go' and self.run_op(f'Основное ядро: {kernel}', kernels.set_default_command(kernel)))
+        dialog.connect('response', lambda _d, resp: resp == 'go' and self.run_op(tr('ask_default.osnovnoe_yadro', kernel=kernel), kernels.set_default_command(kernel)))
         dialog.present(self)
 
     # История
 
     def build_history(self):
         page = Adw.PreferencesPage()
-        group = Adw.PreferencesGroup(title='Что менялось', description='Журнал pacman по дням. Выберите день: что обновлялось, '
-                                                                       'ставилось и удалялось, с версиями и временем.')
+        group = Adw.PreferencesGroup(title=tr('build_history.chto_menyalos'), description=tr('build_history.zhurnal_pacman_po_dnyam'))
         page.add(group)
         days = defaultdict(list)
         for e in self.snap.log:
@@ -1867,7 +1853,7 @@ class Window(Adw.ApplicationWindow):
             r.connect('activated', lambda _r, d=day, es=entries: self.show_history_day(d, es))
             group.add(r)
         if not days:
-            group.add(row('Журнал pacman пуст или недоступен'))
+            group.add(row(tr('build_history.zhurnal_pacman_pust_ili')))
         return page
 
     def show_history_day(self, day, entries):
@@ -1890,11 +1876,11 @@ class Window(Adw.ApplicationWindow):
                 if installed:
                     now = self.snap.packages[e.name].version
                     if action != 'removed' and not versions.endswith(now):
-                        r.set_subtitle(f'{r.get_subtitle()} · сейчас {now}')
+                        r.set_subtitle(tr('show_history_day.seychas', text=r.get_subtitle(), now=now))
                     r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
                     r.connect('activated', lambda _r, n=e.name: self.show_aur(n) if n in self.snap.foreign else self.show_pkg(n))
                 elif action != 'removed':
-                    r.set_subtitle(f'{r.get_subtitle()} · сейчас не установлен')
+                    r.set_subtitle(tr('show_history_day.seychas_ne_ustanovlen', text=r.get_subtitle()))
                 group.add(r)
             page.add(group)
         self.push_page(nav_page)
@@ -1907,7 +1893,7 @@ class Window(Adw.ApplicationWindow):
         s = self.snap
         pkg = s.packages.get(name)
         if not pkg:
-            self.toast(f'{name} не установлен')
+            self.toast(tr('show_pkg.ne_ustanovlen', name=name))
             return
         files = pacman_files(name)
         local = aur.local_info(name)
@@ -1929,17 +1915,17 @@ class Window(Adw.ApplicationWindow):
         head.append(text)
         buttons = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER)
         if update:
-            b = Gtk.Button(label=f'Обновить до {update.new}')
+            b = Gtk.Button(label=tr('show_pkg.obnovit_do', new=update.new))
             b.add_css_class('suggested-action')
             b.add_css_class('pill')
-            b.set_tooltip_text('Только этот пакет и его сборка, если это не потянет обновление общих пакетов')
+            b.set_tooltip_text(tr('show_pkg.tolko_etot_paket_i'))
             b.connect('clicked', lambda *_: self.ask_single_update(name))
             buttons.append(b)
-            b = Gtk.Button(label='Обновить всю систему')
+            b = Gtk.Button(label=tr('show_pkg.obnovit_vsyu_sistemu'))
             b.add_css_class('pill')
             b.connect('clicked', lambda *_: self.confirm_upgrade())
             buttons.append(b)
-        b = Gtk.Button(label='Удалить')
+        b = Gtk.Button(label=tr('show_pkg.udalit'))
         b.add_css_class('destructive-action')
         b.add_css_class('pill')
         b.connect('clicked', lambda *_: self.confirm_repo_remove(name))
@@ -1953,46 +1939,44 @@ class Window(Adw.ApplicationWindow):
             page.add(_screenshots(meta.screenshots))
 
         repo = pacman.repo_info(name)
-        repo_group = Adw.PreferencesGroup(title='В репозитории')
+        repo_group = Adw.PreferencesGroup(title=tr('show_pkg.v_repozitorii'))
         if repo:
             # Локальные списки пакетов могут отставать; свежую версию знает проверка обновлений.
-            repo_group.add(row('Версия', f'{update.new if update else repo.get("Version", "")} · {repo.get("Repository", "")}'))
-            for key, title_ in (('Packager', 'Собрал'), ('Build Date', 'Дата сборки'), ('Download Size', 'Размер загрузки')):
+            repo_group.add(row(tr('show_pkg.versiya'), f'{update.new if update else repo.get("Version", "")} · {repo.get("Repository", "")}'))
+            for key, title_ in (('Packager', tr('show_pkg.sobral')), ('Build Date', tr('show_pkg.data_sborki')), ('Download Size', tr('show_pkg.razmer_zagruzki'))):
                 if repo.get(key):
                     repo_group.add(row(title_, repo[key]))
         else:
-            repo_group.add(row('Нет в подключённых репозиториях', 'пакет поставлен вручную или его репозиторий отключён'))
+            repo_group.add(row(tr('show_pkg.net_v_podklyuchennyh_repozitoriyah'), tr('show_pkg.paket_postavlen_vruchnuyu_ili')))
         page.add(repo_group)
 
-        versions_group = Adw.PreferencesGroup(title='Версии', description='Выберите версию: что в ней изменилось и поставить её. '
-                                                                          'Сверху новые; прошлые берутся из кэша или архива Arch.')
-        wait = row('Загружаем архив версий…')
+        versions_group = Adw.PreferencesGroup(title=tr('show_pkg.versii'), description=tr('show_pkg.vyberite_versiyu_chto_v'))
+        wait = row(tr('show_pkg.zagruzhaem_arhiv_versiy'))
         versions_group.add(wait)
         page.add(versions_group)
-        aur_group = Adw.PreferencesGroup(title='История в AUR', visible=False,
-                                         description='Репозиторий собрал этот пакет из AUR. Выберите правку: что изменилось в той версии '
-                                                     'и собрать её; собранная встанет вместо пакета из репозитория.')
+        aur_group = Adw.PreferencesGroup(title=tr('show_pkg.istoriya_v_aur'), visible=False,
+                                         description=tr('show_pkg.repozitoriy_sobral_etot_paket'))
         page.add(aur_group)
-        history_group = Adw.PreferencesGroup(title='История сборки в Arch', description='Правки сборочного сценария пакета на GitLab Arch.')
-        history_wait = row('Загружаем историю…')
+        history_group = Adw.PreferencesGroup(title=tr('show_pkg.istoriya_sborki_v_arch'), description=tr('show_pkg.pravki_sborochnogo_stsenariya_paketa'))
+        history_wait = row(tr('show_pkg.zagruzhaem_istoriyu'))
         history_group.add(history_wait)
         page.add(history_group)
 
         description = meta.description if meta and meta.description else ''
         if description:
-            about = Adw.PreferencesGroup(title='Описание')
+            about = Adw.PreferencesGroup(title=tr('show_pkg.opisanie'))
             label = Gtk.Label(label=description, wrap=True, xalign=0, selectable=True)
             label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
             about.add(label)
             page.add(about)
-        details = Adw.PreferencesGroup(title='Подробно')
-        for key, title_ in (('Installed Size', 'Размер'), ('Install Date', 'Установлен'), ('Install Reason', 'Причина установки'),
-                            ('Licenses', 'Лицензия'), ('Depends On', 'Зависимости'), ('Required By', 'Нужен пакетам')):
+        details = Adw.PreferencesGroup(title=tr('show_pkg.podrobno'))
+        for key, title_ in (('Installed Size', tr('show_pkg.razmer')), ('Install Date', tr('show_pkg.ustanovlen')), ('Install Reason', tr('show_pkg.prichina_ustanovki')),
+                            ('Licenses', tr('show_pkg.litsenziya')), ('Depends On', tr('show_pkg.zavisimosti')), ('Required By', tr('show_pkg.nuzhen_paketam'))):
             if local.get(key) and local[key] != 'None':
-                value = {'Explicitly installed': 'установлен вами', 'Installed as a dependency for another package': 'как зависимость'}.get(local[key], local[key])
+                value = {'Explicitly installed': tr('show_pkg.ustanovlen_vami'), 'Installed as a dependency for another package': tr('show_pkg.kak_zavisimost')}.get(local[key], local[key])
                 details.add(row(title_, value))
         if local.get('URL') and local['URL'] != 'None':
-            site = row('Сайт программы', local['URL'], activatable=True)
+            site = row(tr('show_pkg.sayt_programmy'), local['URL'], activatable=True)
             site.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
             site.connect('activated', lambda *_: Gtk.UriLauncher(uri=local['URL']).launch(self, None, None))
             details.add(site)
@@ -2015,28 +1999,27 @@ class Window(Adw.ApplicationWindow):
                 where = merged[v]
                 tags = []
                 if where.get('installed'):
-                    tags.append('установлена')
+                    tags.append(tr('show_pkg.ustanovlena'))
                 if where.get('repo'):
-                    tags.append('в репозитории')
+                    tags.append(tr('show_pkg.v_repozitorii_2'))
                 if where.get('cache'):
-                    tags.append('в кэше')
+                    tags.append(tr('show_pkg.v_keshe'))
                 if where.get('archive'):
-                    tags.append('архив Arch')
+                    tags.append(tr('show_pkg.arhiv_arch'))
                 only_repo = not (where.get('cache') or where.get('archive') or where.get('installed'))
                 if only_repo:
-                    tags.append('ставится обновлением системы')
-                r = row(f'Версия {v}', ' · '.join(tags), activatable=not where.get('installed'))
+                    tags.append(tr('show_pkg.stavitsya_obnovleniem_sistemy'))
+                r = row(tr('show_pkg.versiya_2', version=v), ' · '.join(tags), activatable=not where.get('installed'))
                 if where.get('installed'):
-                    r.add_suffix(pill('установлена', 'ok'))
+                    r.add_suffix(pill(tr('show_pkg.ustanovlena'), 'ok'))
                 elif where.get('repo'):
-                    r.add_suffix(pill('новейшая', 'info'))
+                    r.add_suffix(pill(tr('show_pkg.noveyshaya'), 'info'))
                 if not where.get('installed'):
                     r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
                     r.connect('activated', lambda _r, ver=v, upd=only_repo: self.show_pkg_version(name, ver, local.get('URL', ''), files, from_repo=upd))
                 versions_group.add(r)
             if not archived:
-                versions_group.set_description(versions_group.get_description() + ' В архиве Arch этого пакета нет: '
-                                               'это сборка CachyOS или пакет не из Arch, доступны только версии из кэша.')
+                versions_group.set_description(versions_group.get_description() + tr('show_pkg.v_arhive_arch_etogo'))
 
         def show_history(result):
             history_group.remove(history_wait)
@@ -2093,11 +2076,11 @@ class Window(Adw.ApplicationWindow):
         heading.add_css_class('title-1')
         text.append(heading)
         newer = _VerKey(pkg.version) < _VerKey(version)
-        sub = Gtk.Label(label=f'Сейчас установлена {pkg.version}; эта версия ' + ('новее' if newer else 'старше'), xalign=0, wrap=True)
+        sub = Gtk.Label(label=tr('show_pkg_version.seychas_ustanovlena_eta_versiya', version=pkg.version) + (tr('show_pkg_version.novee') if newer else tr('show_pkg_version.starshe')), xalign=0, wrap=True)
         sub.add_css_class('dim-label')
         text.append(sub)
         head.append(text)
-        go = Gtk.Button(label='Обновить до этой' if from_repo else 'Поставить эту версию', valign=Gtk.Align.CENTER, sensitive=from_repo)
+        go = Gtk.Button(label=tr('show_pkg_version.obnovit_do_etoy') if from_repo else tr('show_pkg_version.postavit_etu_versiyu'), valign=Gtk.Align.CENTER, sensitive=from_repo)
         if from_repo:
             go.connect('clicked', lambda *_: self.ask_single_update(name))
         go.add_css_class('suggested-action')
@@ -2108,8 +2091,8 @@ class Window(Adw.ApplicationWindow):
         top.add(head)
         page.add(top)
 
-        program = Adw.PreferencesGroup(title='Что изменилось в программе')
-        changes = Gtk.Label(label='Ищем примечания к выпуску…', xalign=0, wrap=True, selectable=True,
+        program = Adw.PreferencesGroup(title=tr('show_pkg_version.chto_izmenilos_v_programme'))
+        changes = Gtk.Label(label=tr('show_pkg_version.ischem_primechaniya_k_vypusku'), xalign=0, wrap=True, selectable=True,
                             margin_top=14, margin_bottom=14, margin_start=16, margin_end=16)
         changes.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -2119,30 +2102,30 @@ class Window(Adw.ApplicationWindow):
         page.add(program)
         links = Adw.PreferencesGroup(visible=False)
         page.add(links)
-        together = Adw.PreferencesGroup(title='Что поставится', description='Пакеты одной сборки ставятся вместе одной версии, иначе система сломается.')
-        together_wait = row('Ищем файлы в кэше и архиве Arch…')
+        together = Adw.PreferencesGroup(title=tr('show_pkg_version.chto_postavitsya'), description=tr('show_pkg_version.pakety_odnoy_sborki_stavyatsya'))
+        together_wait = row(tr('show_pkg_version.ischem_fayly_v_keshe'))
         together.add(together_wait)
         page.add(together)
         warn = Adw.PreferencesGroup()
-        warn.add(row('Обновление вернёт новейшую', 'следующее обновление системы снова поставит версию из репозитория'))
+        warn.add(row(tr('show_pkg_version.obnovlenie_vernet_noveyshuyu'), tr('show_pkg_version.sleduyuschee_obnovlenie_sistemy_snova')))
         page.add(warn)
         self.push_page(nav_page)
 
         def show_notes(result):
             if isinstance(result, Exception) or not result.text:
-                changes.set_label('Примечаний к этой версии не нашлось: ни у самой программы, ни в выпусках GitHub, ни на Flathub.')
+                changes.set_label(tr('show_pkg_version.primechaniy_k_etoy_versii'))
                 site = url if url and url != 'None' else ''
                 if site:
-                    link = row('Сайт программы', site, activatable=True)
+                    link = row(tr('show_pkg_version.sayt_programmy'), site, activatable=True)
                     link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
                     link.connect('activated', lambda *_: Gtk.UriLauncher(uri=site).launch(self, None, None))
                     links.add(link)
                     links.set_visible(True)
                 return
             set_markup_or_text(changes, markdown_markup(result.text), result.text)
-            program.set_description('Источник: ' + result.source)
+            program.set_description(tr('show_pkg_version.istochnik') + result.source)
             if result.link:
-                link = row('Открыть источник', result.link, activatable=True)
+                link = row(tr('show_pkg_version.otkryt_istochnik'), result.link, activatable=True)
                 link.add_suffix(Gtk.Image(icon_name='adw-external-link-symbolic'))
                 link.connect('activated', lambda *_: Gtk.UriLauncher(uri=result.link).launch(self, None, None))
                 links.add(link)
@@ -2153,36 +2136,34 @@ class Window(Adw.ApplicationWindow):
             for n in group_names:
                 cached = next((c.path for c in s.cache.get(n, []) if c.version == version), None)
                 if cached:
-                    sources[n] = (cached, 'кэш')
+                    sources[n] = (cached, tr('show_pkg_version.kesh'))
                     continue
                 arch = next((a.url for a in archive.versions(n) if a.version == version), None)
-                sources[n] = (arch, 'архив Arch') if arch else (None, '')
+                sources[n] = (arch, tr('show_pkg_version.arhiv_arch')) if arch else (None, '')
             return sources
 
         def show_sources(sources):
             together.remove(together_wait)
             if isinstance(sources, Exception):
-                together.add(row('Не удалось найти файлы', str(sources)))
+                together.add(row(tr('show_pkg_version.ne_udalos_nayti_fayly'), str(sources)))
                 return
             missing = [n for n, (src, _) in sources.items() if not src]
             for n, (src, where) in sources.items():
-                r = row(n, f'{s.packages[n].version}  →  {version} · {where}' if src else 'этой версии нет ни в кэше, ни в архиве Arch')
+                r = row(n, f'{s.packages[n].version}  →  {version} · {where}' if src else tr('show_pkg_version.etoy_versii_net_ni'))
                 if not src:
-                    r.add_suffix(pill('нет', 'warn'))
+                    r.add_suffix(pill(tr('show_pkg_version.net'), 'warn'))
                 together.add(r)
             if missing:
-                together.set_description('Не у всех пакетов этой сборки есть такая версия, поэтому поставить её нельзя: '
-                                         'пакеты разных версий сломали бы систему.')
+                together.set_description(tr('show_pkg_version.ne_u_vseh_paketov'))
                 return
             go.set_sensitive(True)
             paths = [src for src, _ in sources.values()]
             go.connect('clicked', lambda *_: (self.run_op(
-                f'{name}: установка {version}', ops.install_files_command(paths))))
+                tr('show_pkg_version.ustanovka', name=name, version=version), ops.install_files_command(paths))))
 
         background(lambda: notes.for_version(name, version, url, aur.metainfo_file(files)), show_notes)
         if from_repo:
-            together.set_description('Эта версия есть в репозитории: обновление поставит её вместе с пакетами её сборки, '
-                                     'если это не потянет обновление общих пакетов.')
+            together.set_description(tr('show_pkg_version.eta_versiya_est_v'))
             together.remove(together_wait)
             warn.set_visible(False)
         else:
@@ -2194,93 +2175,91 @@ class Window(Adw.ApplicationWindow):
 
         def show(result):
             if isinstance(result, Exception):
-                self.toast(f'Не удалось рассчитать обновление: {result}')
+                self.toast(tr('ask_single_update.ne_udalos_rasschitat_obnovlenie', result=result))
                 return
             targets, others, new = result
             if not targets:
-                self.toast('Новой версии в свежих списках нет: нажмите «Проверить заново»')
+                self.toast(tr('ask_single_update.novoy_versii_v_svezhih'))
                 return
             if others:
-                ask = Adw.AlertDialog(heading=f'{name} отдельно не обновить',
-                                      body='Новая версия потянет обновление общих пакетов, которыми пользуются и другие программы: '
+                ask = Adw.AlertDialog(heading=tr('ask_single_update.otdelno_ne_obnovit', name=name),
+                                      body=tr('ask_single_update.novaya_versiya_potyanet_obnovlenie')
                                            + ', '.join(f'{t.name} {t.version}' for t in others[:8])
-                                           + '. Обновлённые отдельно, они могут сломать программы, собранные под старые. Обновите всю систему.')
-                ask.add_response('cancel', 'Отмена')
-                ask.add_response('all', 'Обновить всю систему')
+                                           + tr('ask_single_update.obnovlennye_otdelno_oni_mogut'))
+                ask.add_response('cancel', tr('ask_single_update.otmena'))
+                ask.add_response('all', tr('ask_single_update.obnovit_vsyu_sistemu'))
                 ask.set_response_appearance('all', Adw.ResponseAppearance.SUGGESTED)
                 ask.connect('response', lambda _d, resp: resp == 'all' and self.confirm_upgrade())
                 ask.present(self)
                 return
             lines = [f'{t.name}  {s.packages[t.name].version} → {t.version}' for t in targets if t.name in s.packages]
-            lines += [f'{t.name} {t.version} (новая зависимость)' for t in new]
+            lines += [tr('ask_single_update.novaya_zavisimost', name=t.name, version=t.version) for t in new]
             required = aur.local_info(name).get('Required By', 'None')
-            body = ('Поставится только это:\n' + '\n'.join(lines) + '\n\nОбщие пакеты не меняются, поэтому другие программы это не заденет.'
-                    + ('' if required in ('', 'None') else f' Пакет нужен и другим ({required.replace(chr(10), " ")[:120]}), '
-                       'но они получат ту же совместимую версию.'))
-            ask = Adw.AlertDialog(heading=f'Обновить только {name}?', body=body)
-            ask.add_response('cancel', 'Отмена')
-            ask.add_response('go', 'Обновить')
+            body = (tr('ask_single_update.postavitsya_tolko_eto') + '\n'.join(lines) + tr('ask_single_update.obschie_pakety_ne_menyayutsya')
+                    + ('' if required in ('', 'None') else tr('ask_single_update.paket_nuzhen_i_drugim', packages=required.replace(chr(10), " ")[:120])))
+            ask = Adw.AlertDialog(heading=tr('ask_single_update.obnovit_tolko', name=name), body=body)
+            ask.add_response('cancel', tr('ask_single_update.otmena'))
+            ask.add_response('go', tr('ask_single_update.obnovit'))
             ask.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
             ask.set_default_response('cancel')
             urls = [t.url for t in targets]
             ask.connect('response', lambda _d, resp: resp == 'go' and (self.run_op(
-                f'Обновление {name}', pacman.install_urls_command(urls))))
+                tr('ask_single_update.obnovlenie', name=name), pacman.install_urls_command(urls))))
             ask.present(self)
 
         background(lambda: pacman.single_update_plan(group, s.packages), show)
 
     def confirm_repo_remove(self, name):
         group = Adw.PreferencesGroup()
-        deps = Adw.SwitchRow(title='Убрать ненужные зависимости', subtitle='пакеты, поставленные только ради этого и больше никому не нужные',
+        deps = Adw.SwitchRow(title=tr('confirm_repo_remove.ubrat_nenuzhnye_zavisimosti'), subtitle=tr('confirm_repo_remove.pakety_postavlennye_tolko_radi'),
                              active=True)
         group.add(deps)
-        ask = Adw.AlertDialog(heading=f'Удалить {name}?', body='Пакет удалится из системы; настройки в домашней папке останутся. '
-                                                               'Если он нужен другим пакетам, pacman откажется и объяснит почему.')
+        ask = Adw.AlertDialog(heading=tr('confirm_repo_remove.udalit_2', name=name), body=tr('confirm_repo_remove.paket_udalitsya_iz_sistemy'))
         ask.set_extra_child(group)
-        ask.add_response('cancel', 'Отмена')
-        ask.add_response('go', 'Удалить')
+        ask.add_response('cancel', tr('confirm_repo_remove.otmena'))
+        ask.add_response('go', tr('confirm_repo_remove.udalit'))
         ask.set_response_appearance('go', Adw.ResponseAppearance.DESTRUCTIVE)
         ask.set_default_response('cancel')
         ask.connect('response', lambda _d, resp: resp == 'go' and (self.run_op(
-            f'Удаление {name}', pacman.remove_command(name, deps.get_active()))))
+            tr('confirm_repo_remove.udalenie', name=name), pacman.remove_command(name, deps.get_active()))))
         ask.present(self)
 
     def confirm_upgrade(self):
         s = self.snap
         reboot = [u.name for u in s.updates if u.needs_reboot]
         touching = [n for n in s.news if n.touches]
-        body = f'Будет обновлено пакетов: {len(s.updates)}.'
+        body = tr('confirm_upgrade.budet_obnovleno_paketov', count=len(s.updates))
         if reboot:
-            body += f' После этого понадобится перезагрузка ({", ".join(reboot[:5])}).'
+            body += tr('confirm_upgrade.posle_etogo_ponadobitsya_perezagruzka', packages=", ".join(reboot[:5]))
         if touching:
-            body += f' Сначала прочитайте новости: «{touching[0].title}».'
-        dialog = Adw.AlertDialog(heading='Обновить систему?', body=body)
-        dialog.add_response('cancel', 'Отмена')
-        dialog.add_response('go', 'Обновить')
+            body += tr('confirm_upgrade.snachala_prochitayte_novosti', title=touching[0].title)
+        dialog = Adw.AlertDialog(heading=tr('confirm_upgrade.obnovit_sistemu'), body=body)
+        dialog.add_response('cancel', tr('confirm_upgrade.otmena'))
+        dialog.add_response('go', tr('confirm_upgrade.obnovit'))
         dialog.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
-        dialog.connect('response', lambda _d, resp: resp == 'go' and self.run_op('Обновление системы', ops.upgrade_command()))
+        dialog.connect('response', lambda _d, resp: resp == 'go' and self.run_op(tr('confirm_upgrade.obnovlenie_sistemy'), ops.upgrade_command()))
         dialog.present(self)
 
     def run_op(self, title, cmd, pacman_lock=True):
         if pacman_lock and ops.busy():
-            self.toast('pacman сейчас занят другой программой, попробуйте позже')
+            self.toast(tr('run_op.pacman_seychas_zanyat_drugoy'))
             return
         if self.operation and not self.operation.finished:
-            self.toast('Дождитесь окончания текущего действия')
+            self.toast(tr('run_op.dozhdites_okonchaniya_tekuschego_deystviya'))
             return
 
         def done(code):
             if code == 0:
                 self.refresh()
             elif code not in (126, 127):
-                toast = Adw.Toast(timeout=0, use_markup=False, button_label='Консоль')
-                toast.set_title(f'{title}: не получилось')
+                toast = Adw.Toast(timeout=0, use_markup=False, button_label=tr('run_op.konsol'))
+                toast.set_title(tr('run_op.ne_poluchilos', title=title))
                 toast.connect('button-clicked', lambda *_: self.show_console(self.operation))
                 self.toasts.add_toast(toast)
         self.operation = Operation(title, cmd, done)
         self.downloads.add(self.operation)
-        toast = Adw.Toast(timeout=4, use_markup=False, button_label='Показать')
-        toast.set_title(f'{title}: начато')
+        toast = Adw.Toast(timeout=4, use_markup=False, button_label=tr('run_op.pokazat'))
+        toast.set_title(tr('run_op.nachato', title=title))
         toast.connect('button-clicked', lambda *_: self.open_downloads())
         self.toasts.add_toast(toast)
         page = self.nav.get_visible_page()

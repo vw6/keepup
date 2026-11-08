@@ -250,13 +250,13 @@ class Progress(unittest.TestCase):
                      '(6/6) Updating the desktop file MIME type cache...']:
             progress.feed(s, line)
             values.append(overall.update(s))
-        self.assertEqual(s.stage, 'Настройка системы')
+        self.assertEqual((s.stage, progress.label(s)), ('hooks', 'Настройка системы'))
         self.assertEqual(s.detail, 'Шаг 6 из 6')
         self.assertEqual(values, sorted(values))
         self.assertAlmostEqual(values[-1], 1.0)
         a = progress.State()
         progress.feed(a, 'обновление amneziavpn-bin...')
-        self.assertEqual((a.stage, a.detail), ('Установка', 'Обновление: amneziavpn-bin'))
+        self.assertEqual((a.stage, a.detail), ('install', 'Обновление: amneziavpn-bin'))
 
 
 class FindNew(unittest.TestCase):

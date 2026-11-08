@@ -36,6 +36,11 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.0" date="2026-11-08">
+      <description>
+        <p>All interface strings moved to translation files (keepup/locales, one JSON per language, Russian as the base). The language follows the system; missing strings fall back to Russian.</p>
+      </description>
+    </release>
     <release version="0.3.6" date="2026-11-08">
       <description>
         <p>The window opens on the Overview page again instead of Downloads.</p>

@@ -4,6 +4,7 @@ import re
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
+from .i18n import tr
 
 LOCAL_DB = '/var/lib/pacman/local'
 CACHE_DIR = '/var/cache/pacman/pkg'
@@ -138,7 +139,7 @@ def list_updates():
     out = subprocess.run(['checkupdates', '--nocolor'], capture_output=True, stdin=subprocess.DEVNULL, text=True)
     # Код 2 значит «обновлений нет», 1 это ошибка сети или базы.
     if out.returncode == 1:
-        raise RuntimeError(out.stderr.strip() or 'checkupdates завершился с ошибкой')
+        raise RuntimeError(out.stderr.strip() or tr('pacman.list_updates.checkupdates_zavershilsya_s_oshibkoy'))
     return parse_checkupdates(out.stdout)
 
 
@@ -398,7 +399,7 @@ def single_update_plan(names, packages, dbpath=CHECKUPDATES_DB):
     out = subprocess.run(['pacman', '-Sp', '--dbpath', dbpath, '--print-format', '%n %v %l', *names],
                          capture_output=True, stdin=subprocess.DEVNULL, text=True, env={**os.environ, 'LC_ALL': 'C'})
     if out.returncode != 0:
-        raise RuntimeError(out.stderr.strip() or 'pacman не смог рассчитать обновление')
+        raise RuntimeError(out.stderr.strip() or tr('pacman.single_update_plan.pacman_ne_smog_rasschitat'))
     targets = [Target(*line.split(' ', 2)) for line in out.stdout.splitlines() if line.count(' ') >= 2]
     # Пакеты сборки, у которых обновления нет, pacman просто поставил бы заново: их не считаем.
     targets = [t for t in targets if t.name not in packages or packages[t.name].version != t.version]

@@ -4,6 +4,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
+from .i18n import tr
 
 ENV = {**os.environ, 'LC_ALL': 'C'}
 
@@ -60,11 +61,11 @@ def parse_updates(text):
 def with_updates(apps):
     out = _run(['remote-ls', '--updates', '--app', '--columns=application,version'], timeout=120)
     if out.returncode != 0:
-        raise RuntimeError(out.stderr.strip() or 'flatpak remote-ls завершился с ошибкой')
+        raise RuntimeError(out.stderr.strip() or tr('flatpak.with_updates.flatpak_remote_ls_zavershilsya'))
     found = parse_updates(out.stdout)
     for app in apps:
         if app.app_id in found:
-            app.new_version = found[app.app_id] or 'новая сборка'
+            app.new_version = found[app.app_id] or tr('flatpak.with_updates.novaya_sborka')
     return apps
 
 
@@ -83,7 +84,7 @@ def parse_log(text):
 def history(app):
     out = _run(['remote-info', '--log', f'--{app.installation}', app.origin, f'{app.app_id}//{app.branch}'], timeout=120)
     if out.returncode != 0:
-        raise RuntimeError(out.stderr.strip() or 'flatpak remote-info завершился с ошибкой')
+        raise RuntimeError(out.stderr.strip() or tr('flatpak.history.flatpak_remote_info_zavershilsya'))
     return parse_log(out.stdout)
 
 
