@@ -1,8 +1,19 @@
 <p align="center"><img src="data/icons/ru.vw6.KeepUp.svg" width="128" alt="KeepUp"></p>
 
-# KeepUp
+<h1 align="center">KeepUp</h1>
 
-Окно обновлений для Arch Linux и CachyOS в стиле GNOME. *English below.*
+<p align="center">
+  Окно обновлений для Arch Linux и CachyOS в стиле GNOME<br>
+  <sub>GNOME-style update manager for Arch Linux and CachyOS · <a href="#english">English below</a></sub>
+</p>
+
+<p align="center">
+  <a href="https://github.com/vw6/keepup/releases/latest"><img src="https://img.shields.io/github/v/release/vw6/keepup?label=%D0%B2%D1%8B%D0%BF%D1%83%D1%81%D0%BA" alt="выпуск"></a>
+  <img src="https://img.shields.io/badge/GTK4%20%2B%20libadwaita-4a86cf" alt="GTK4 + libadwaita">
+  <img src="https://img.shields.io/badge/license-MPL--2.0-brightgreen" alt="MPL-2.0">
+</p>
+
+<p align="center"><img src="docs/screenshots/overview.png" width="820" alt="Обзор: обновления, перезагрузка, новости Arch"></p>
 
 ## О проекте
 
@@ -21,6 +32,26 @@
 Вкладка «Ядра» показывает установленные и доступные ядра, ставит ядро вместе с заголовками и модулями ваших устройств, подсказывает, если у запасного ядра не хватает модуля, и выбирает основное ядро в загрузчике Limine. Вкладка «История» раскладывает журнал pacman по дням.
 
 Все действия с правами root идут через стандартное окно пароля (pkexec). Пароль программа не видит.
+
+## Как это выглядит
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/install.png" alt="Установить"><br><b>Установить.</b> Поиск сразу по репозиториям, Flathub и AUR, уже установленное помечено.</td>
+    <td width="50%"><img src="docs/screenshots/packages.png" alt="Пакеты"><br><b>Пакеты.</b> Обновления из репозиториев, пометка, где после обновления нужна перезагрузка.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/news.png" alt="Новости Arch"><br><b>Новости Arch.</b> С переводом на русский и пометкой, если новость касается ваших пакетов.</td>
+    <td><img src="docs/screenshots/aur.png" alt="AUR"><br><b>AUR.</b> Пакеты не из репозиториев: изменения PKGBUILD, сборка любой прошлой версии.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/flatpak.png" alt="Flatpak"><br><b>Flatpak.</b> Приложения с описанием, снимками, примечаниями и прошлыми сборками.</td>
+    <td><img src="docs/screenshots/kernels.png" alt="Ядра"><br><b>Ядра.</b> Установленные и доступные ядра, модули устройств, основное ядро в Limine.</td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><img src="docs/screenshots/history.png" width="50%" alt="История"><br><b>История.</b> Журнал pacman по дням: что обновлялось, ставилось и удалялось.</td>
+  </tr>
+</table>
 
 ## Установка
 
@@ -50,7 +81,11 @@ make install DESTDIR=/ PREFIX=/usr
 
 ---
 
+<a id="english"></a>
+
 ## English
+
+See the screenshots above; the interface is available in Russian and English.
 
 KeepUp is a GNOME-style update manager for Arch Linux and CachyOS: search and install from the repositories, Flathub and AUR, pending updates from the repositories, AUR and Flatpak, Arch news with optional machine translation and an offline archive, a page for every package with release notes, rollback to any previous version (pacman cache, Arch Linux Archive or an AUR commit), kernel management with Limine, and pacman history by day.
 
