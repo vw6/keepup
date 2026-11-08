@@ -36,6 +36,11 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.3.3" date="2026-11-08">
+      <description>
+        <p>An open console stays open when you leave Downloads and come back.</p>
+      </description>
+    </release>
     <release version="0.3.2" date="2026-11-08">
       <description>
         <p>No search on the Overview and Downloads pages. Returning to the Install page keeps the previous results instead of searching again.</p>

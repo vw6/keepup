@@ -451,12 +451,24 @@ class Window(Adw.ApplicationWindow):
         view.set_content(side)
         return view
 
+    def remember_console(self):
+        """Уходя из «Загрузок» с открытой консолью, запоминаем её: при возврате она откроется снова."""
+        if self.stack.get_visible_child_name() == 'downloads':
+            self.console_left = getattr(self.nav.get_visible_page(), 'console_op', None)
+
     def on_downloads_selected(self, _box, r):
         if r is None:
             return
         self.sidebar_list.unselect_all()
+        # Повторный щелчок по «Загрузкам» из самих загрузок возвращает к списку, а не в консоль.
+        reopen = getattr(self, 'console_left', None) if self.stack.get_visible_child_name() != 'downloads' else None
+        self.console_left = None
         self.nav.pop_to_tag('root')
         self.stack.set_visible_child_name('downloads')
+        if reopen in self.downloads.ops:
+            self.nav.set_animate_transitions(False)
+            self.show_console(reopen)
+            self.nav.set_animate_transitions(True)
         self.allow_search(False)
         self.content_title.set_title('Загрузки')
         self.content_page.set_title('Загрузки')
@@ -481,6 +493,7 @@ class Window(Adw.ApplicationWindow):
         toolbar.set_content(scroll)
         self.page_counter = getattr(self, 'page_counter', 0) + 1
         page = Adw.NavigationPage(title=f'Консоль: {op.title}', child=toolbar, tag=f'detail-{self.page_counter}')
+        page.console_op = op
         follow = {'on': True}
         adj = scroll.get_vadjustment()
         # Следим за концом, только если пользователь сам не отмотал вверх.
@@ -510,6 +523,7 @@ class Window(Adw.ApplicationWindow):
         if hasattr(self, 'downloads_list'):
             self.downloads_list.unselect_all()
         if hasattr(self, 'nav'):
+            self.remember_console()
             self.nav.pop_to_tag('root')
         title = dict((k, t) for k, t, _ in PAGES)[r.page_key]
         was_install = self.stack.get_visible_child_name() == 'install'
