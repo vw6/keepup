@@ -36,6 +36,11 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.3.6" date="2026-11-08">
+      <description>
+        <p>The window opens on the Overview page again instead of Downloads.</p>
+      </description>
+    </release>
     <release version="0.3.5" date="2026-11-08">
       <description>
         <p>Every page remembers the cards and consoles opened on it: switching pages and coming back returns you where you were. Clicking the current page again goes back to its start.</p>

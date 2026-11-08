@@ -415,6 +415,8 @@ class Window(Adw.ApplicationWindow):
         self.toasts.set_child(split)
         self.set_content(self.toasts)
         self.open_page(page if page in dict((k, t) for k, t, _ in PAGES) else 'overview')
+        # Без этого GTK при показе окна ставит фокус на пункт «Загрузки», а фокус в списке сразу выбирает пункт.
+        self.set_focus(self.sidebar_list.get_selected_row())
         self.show_loading()
         self.refresh()
 
