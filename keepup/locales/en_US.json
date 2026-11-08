@@ -1,0 +1,638 @@
+{
+  "metadata": {
+    "language": "en_US",
+    "name": "English"
+  },
+  "months": {
+    "yanvarya": "January",
+    "fevralya": "February",
+    "marta": "March",
+    "aprelya": "April",
+    "maya": "May",
+    "iyunya": "June",
+    "iyulya": "July",
+    "avgusta": "August",
+    "sentyabrya": "September",
+    "oktyabrya": "October",
+    "noyabrya": "November",
+    "dekabrya": "December"
+  },
+  "pages": {
+    "obzor": "Overview",
+    "ustanovit": "Install",
+    "novosti_arch": "Arch News",
+    "pakety": "Packages",
+    "yadra": "Kernels",
+    "istoriya": "History"
+  },
+  "history_groups": {
+    "obnovleny": "Upgraded",
+    "obnovleno": "upgraded",
+    "ustanovleny": "Installed",
+    "ustanovleno": "installed",
+    "otkacheny": "Downgraded",
+    "otkacheno": "downgraded",
+    "pereustanovleny": "Reinstalled",
+    "pereustanovleno": "reinstalled",
+    "udaleny": "Removed",
+    "udaleno": "removed"
+  },
+  "ask_install": {
+    "budut_ustanovleny_vmeste_s": "To be installed: {packages}.\n\nThe whole system will be upgraded along with them, as Arch requires when installing new packages. The boot menu entry will appear by itself.",
+    "postavit_moduli_dlya": "Install modules for {kernel}?",
+    "postavit_yadro": "Install kernel {kernel}?",
+    "otmena": "Cancel",
+    "ustanovit": "Install",
+    "ustanovka": "Installing {kernel}"
+  },
+  "confirm_upgrade": {
+    "budet_obnovleno_paketov": "Packages to upgrade: {count}.",
+    "posle_etogo_ponadobitsya_perezagruzka": " A reboot will be needed afterwards ({packages}).",
+    "snachala_prochitayte_novosti": " Read the news first: “{title}”.",
+    "otmena": "Cancel",
+    "obnovit": "Upgrade",
+    "obnovit_sistemu": "Upgrade the system?",
+    "obnovlenie_sistemy": "System upgrade"
+  },
+  "operation": {
+    "ne_poluchilos": "Failed",
+    "gotovo": "Done",
+    "otmeneno_parol_ne_vveden": "Cancelled: password not entered",
+    "net_prav_na_eto": "Not allowed to do this"
+  },
+  "on_downloads_selected": {
+    "zagruzki": "Downloads"
+  },
+  "common": {
+    "repozitorii": "Repositories"
+  },
+  "ask_new_install": {
+    "otmena": "Cancel",
+    "ustanovit": "Install",
+    "postavitsya": "{name} {version} will be installed",
+    "obschie_pakety_sistemy_ne": ". Shared system packages stay as they are.",
+    "otkryt_pkgbuild": "Open PKGBUILD",
+    "sobrat_i_ustanovit": "Build and install",
+    "ustanovit_2": "Install {name}?",
+    "prilozhenie_postavitsya_iz_nuzhnye": "The app will be installed from {source}; the runtimes it needs will be downloaded with it.",
+    "dlya_paketov_aur_nuzhen": "AUR packages need paru",
+    "sobrat_i_ustanovit_2": "Build and install {name}?",
+    "pakety_aur_vykladyvayut_sami": "AUR packages are published by users themselves and are not checked by Arch. If in doubt, open the PKGBUILD first: it shows what will be downloaded and from where. The build runs on this computer and may take a while.",
+    "ne_udalos_rasschitat_ustanovku": "Could not work out the installation: {result}",
+    "obnovit_i_ustanovit": "Upgrade and install",
+    "ustanovka": "Installing {name}",
+    "snachala_obnovit_sistemu": "Upgrade the system first",
+    "i_nuzhnye_emu_pakety": " and the packages it needs: ",
+    "i_drugie": " and more",
+    "otdelno_ih_ne_obnovit": ". They cannot be upgraded separately, so the installation will go together with a full system upgrade.",
+    "nuzhny_bolee_novye_obschie": "{name} needs newer shared packages: "
+  },
+  "build_news": {
+    "sohraneny_vse_novosti_kotorye": "All news the app has seen is kept, together with translations; it checks the feed at most once every half hour.",
+    "set_nedostupna_pokazany_sohranennye": "No network: showing saved news.",
+    "novosti_arch_linux": "Arch Linux News",
+    "perevodit_na_russkiy": "Translate into Russian",
+    "mashinnyy_perevod_cherez_translate": "machine translation via translate-shell; commands, versions and package names are not translated",
+    "novostey_net": "No news",
+    "lenta_ne_zagruzilas_i": "the feed did not load and there is no saved copy",
+    "kasaetsya": "affects: "
+  },
+  "show_news": {
+    "novost_arch": "Arch News",
+    "tekst": "Text",
+    "otkryt_na_sayte_arch": "Open on the Arch website",
+    "perevodim": "Translating…",
+    "mashinnyy_perevod_pri_somneniyah": "Machine translation; if in doubt, check the original.",
+    "kasaetsya_vashih_obnovleniy": "affects your updates: ",
+    "perevod": "Translation",
+    "original": "Original",
+    "perevod_ne_udalsya_pokazan": "Translation failed: {result}. Showing the original."
+  },
+  "ask_rollback": {
+    "otmena": "Cancel",
+    "postavit": "Install",
+    "versiya": "Version",
+    "drugaya_versiya": "Another version of {name}",
+    "seychas_ustanovlena": "Currently installed: {version}.",
+    "novee_ustanovlennoy": "  (newer than installed)",
+    "otkatyatsya_vmeste": "Rolled back together",
+    "ne_u_vseh_svyazannyh": " Not all related packages have this version in the cache: rolling back only some of them would break the system.",
+    "ustanovka": "{name}: installing {version}",
+    "etoy_versii_v_keshe": "this version is not in the cache",
+    "net_v_keshe": "not in the cache"
+  },
+  "show_aur": {
+    "zagruzhaem_svedeniya_aur": "Loading AUR details…",
+    "zagruzhaem_istoriyu": "Loading history…",
+    "udalit": "Remove",
+    "v_aur": "In the AUR",
+    "izmeneniya_pkgbuild": "PKGBUILD changes",
+    "poslednie_pravki_sborochnogo_stsenariya": "Latest changes to the build script in the AUR, newest first.",
+    "podrobno": "Details",
+    "ustanovlena_versiya": "Installed version",
+    "razmer": "Size",
+    "ustanovlen": "Installed",
+    "prichina_ustanovki": "Install reason",
+    "litsenziya": "License",
+    "zavisimosti": "Dependencies",
+    "sayt_programmy": "Website",
+    "stranitsa_v_aur": "AUR page",
+    "pravki_sborochnogo_stsenariya_v": "Changes to the build script in the AUR, newest first. Pick a change to build and install that version; the button on the right opens the change on the website.",
+    "obnovit_do": "Upgrade to {new}",
+    "drugaya_versiya": "Another version…",
+    "opisanie": "Description",
+    "pomechen_kak_ustarevshiy": "Flagged out of date",
+    "soprovozhdayuschemu_soobschili_chto_vyshla": "the maintainer was told a new version of the program is out",
+    "versiya_v_aur": "Version in the AUR",
+    "soprovozhdayuschiy": "Maintainer",
+    "golosa_i_populyarnost": "Votes and popularity",
+    "golosov_populyarnost": "votes: {votes} · popularity {popularity}",
+    "svedeniya_aur_ne_zagruzilis": "AUR details did not load",
+    "etogo_paketa_net_v": "This package is not in the AUR",
+    "on_iz_otklyuchennogo_repozitoriya": "it comes from a disabled repository or was built by hand",
+    "ustarel": "out of date",
+    "net_paket_broshen_ego": "none: the package is orphaned, anyone can adopt it",
+    "poslednee_izmenenie": "Last change",
+    "istoriya_ne_zagruzilas": "History did not load",
+    "ustanovlen_vami": "installed by you",
+    "kak_zavisimost": "as a dependency",
+    "zapisey_net": "no entries",
+    "noveyshaya": "newest",
+    "otkryt_pravku_na_sayte": "Open the change on the AUR website"
+  },
+  "confirm_aur_build": {
+    "pravka_ot": "{name}: change of {date}",
+    "pravka_ot_2": "Change of {date}: “{title}”",
+    "sobrat_i_postavit": "Build and install",
+    "chto_izmenilos_v_programme": "What changed in the program",
+    "ischem_primechaniya_k_vypusku": "Looking for release notes…",
+    "chto_izmenilos_v_sborke": "What changed in the build",
+    "protiv_proshloy_pravki_pkgbuild": "Compared with the previous PKGBUILD change.",
+    "pered_sborkoy": "Before the build",
+    "kak_eto_proydet": "How it goes",
+    "pkgbuild_etoy_pravki_skachaetsya": "The PKGBUILD of this change is downloaded from the AUR, the package is built on this computer and replaces the current one; confirm the installation with your password. The build progress is shown in the window.",
+    "esli_ne_soberetsya": "If it does not build",
+    "starye_versii_inogda_ne": "old versions sometimes fail to build: the program files may have disappeared from the author's site. Then the system stays unchanged.",
+    "potom": "Later",
+    "knopka_obnovit_aur_snova": "the “Upgrade AUR” button will install the newest version again.",
+    "sborka": "Building {name} ({date})",
+    "primechaniya_ne_zagruzilis": "Release notes did not load: {result}",
+    "primechaniy_k_etoy_versii": "No release notes found for this version: not in the program itself, not on Flathub, not in GitHub releases.",
+    "istochnik": "Source: ",
+    "otkryt_istochnik": "Open source",
+    "sayt_programmy": "Website"
+  },
+  "confirm_aur_one": {
+    "otmena": "Cancel",
+    "sobrat_i_ustanovit": "Build and install",
+    "obnovit": "Upgrade {name}?",
+    "paket_soberetsya_na_etom": "{old} → {new}. The package is built on this computer without reviewing the PKGBUILD; confirm the installation with your password.",
+    "obnovlenie": "Upgrading {name}"
+  },
+  "confirm_pkg_remove": {
+    "otmena": "Cancel",
+    "udalit": "Remove",
+    "ubrat_nenuzhnye_zavisimosti": "Remove unneeded dependencies",
+    "pakety_postavlennye_tolko_radi": "packages installed only for this one and no longer needed by anything else",
+    "udalit_2": "Remove {name}?",
+    "paket_udalitsya_iz_sistemy": "The package will be removed from the system; settings in your home folder stay.",
+    "udalenie": "Removing {name}"
+  },
+  "confirm_aur": {
+    "otmena": "Cancel",
+    "sobrat_i_ustanovit": "Build and install",
+    "obnovit_pakety_aur": "Upgrade AUR packages?",
+    "budut_sobrany_i_ustanovleny": "To be built and installed: {names}. The build runs without reviewing the PKGBUILD; confirm the installation with your password, the prompt may appear several times.",
+    "obnovlenie_aur": "AUR upgrade"
+  },
+  "confirm_app_update": {
+    "otmena": "Cancel",
+    "obnovit": "Update",
+    "obnovit_2": "Update {app}?",
+    "nuzhnye_prilozheniyu_sredy_obnovyatsya": "{version} → {new_version}. The runtimes the app needs will be updated with it.",
+    "obnovlenie": "Updating {app}"
+  },
+  "confirm_app_remove": {
+    "otmena": "Cancel",
+    "udalit": "Remove",
+    "udalit_i_dannye_prilozheniya": "Also remove app data",
+    "nastroyki_i_fayly_v": "settings and files in ~/.var/app/{app_id}",
+    "ubrat_nenuzhnye_sredy": "Remove unused runtimes",
+    "sredy_vypolneniya_kotorymi_bolshe": "runtimes no other app uses any more",
+    "udalit_2": "Remove {name}?",
+    "prilozhenie_propadet_iz_sistemy": "The app will be removed from the system. Without its data it can be reinstalled as it was.",
+    "udalenie": "Removing {name}"
+  },
+  "confirm_flatpak": {
+    "otmena": "Cancel",
+    "postavit": "Install",
+    "postavit_etu_sborku": "Install this build of {name}?",
+    "menyaetsya_tolko_prilozhenie_sredy": "{subject}\n{date}\n\nOnly the app changes, runtimes stay as they are.",
+    "sborka": "{name}: build {commit}"
+  },
+  "ask_default": {
+    "otmena": "Cancel",
+    "sdelat_osnovnym": "Make default",
+    "sdelat_osnovnym_2": "Make {kernel} the default?",
+    "v_etc_default_limine": "/etc/default/limine will get BOOT_ORDER=\"{order}\", the previous settings are kept as a copy. Then limine-update rebuilds the boot menu, which takes about a minute.",
+    "osnovnoe_yadro": "Default kernel: {kernel}"
+  },
+  "show_pkg": {
+    "zagruzhaem_arhiv_versiy": "Loading the version archive…",
+    "zagruzhaem_istoriyu": "Loading history…",
+    "ne_ustanovlen": "{name} is not installed",
+    "tolko_etot_paket_i": "Only this package and its build, unless that pulls in an upgrade of shared packages",
+    "udalit": "Remove",
+    "v_repozitorii": "In the repository",
+    "versii": "Versions",
+    "vyberite_versiyu_chto_v": "Pick a version: see what changed in it and install it. Newest first; older ones come from the cache or the Arch archive.",
+    "istoriya_v_aur": "History in the AUR",
+    "repozitoriy_sobral_etot_paket": "The repository built this package from the AUR. Pick a change: see what changed in that version and build it; the built package replaces the one from the repository.",
+    "istoriya_sborki_v_arch": "Build history in Arch",
+    "pravki_sborochnogo_stsenariya_paketa": "Changes to the package build script on the Arch GitLab.",
+    "podrobno": "Details",
+    "razmer": "Size",
+    "ustanovlen": "Installed",
+    "prichina_ustanovki": "Install reason",
+    "litsenziya": "License",
+    "zavisimosti": "Dependencies",
+    "nuzhen_paketam": "Required by",
+    "sayt_programmy": "Website",
+    "obnovit_do": "Upgrade to {new}",
+    "obnovit_vsyu_sistemu": "Upgrade the whole system",
+    "versiya": "Version",
+    "sobral": "Packager",
+    "data_sborki": "Build date",
+    "razmer_zagruzki": "Download size",
+    "net_v_podklyuchennyh_repozitoriyah": "Not in the enabled repositories",
+    "paket_postavlen_vruchnuyu_ili": "the package was installed by hand or its repository is disabled",
+    "opisanie": "Description",
+    "versiya_2": "Version {version}",
+    "ustanovlena": "installed",
+    "v_repozitorii_2": "in the repository",
+    "v_keshe": "in the cache",
+    "arhiv_arch": "Arch archive",
+    "stavitsya_obnovleniem_sistemy": "installed by a system upgrade",
+    "v_arhive_arch_etogo": " This package is not in the Arch archive: it is a CachyOS build or not from Arch, only versions from the cache are available.",
+    "ustanovlen_vami": "installed by you",
+    "kak_zavisimost": "as a dependency",
+    "noveyshaya": "newest"
+  },
+  "show_pkg_version": {
+    "ischem_fayly_v_keshe": "Looking for files in the cache and the Arch archive…",
+    "chto_izmenilos_v_programme": "What changed in the program",
+    "ischem_primechaniya_k_vypusku": "Looking for release notes…",
+    "chto_postavitsya": "What will be installed",
+    "pakety_odnoy_sborki_stavyatsya": "Packages of one build are installed together at the same version, otherwise the system breaks.",
+    "obnovlenie_vernet_noveyshuyu": "An upgrade brings back the newest",
+    "sleduyuschee_obnovlenie_sistemy_snova": "the next system upgrade will install the repository version again",
+    "eta_versiya_est_v": "This version is in the repository: the upgrade installs it together with the packages of its build, unless that pulls in an upgrade of shared packages.",
+    "seychas_ustanovlena_eta_versiya": "Currently installed: {version}; this version is ",
+    "obnovit_do_etoy": "Upgrade to this one",
+    "postavit_etu_versiyu": "Install this version",
+    "primechaniy_k_etoy_versii": "No release notes found for this version: not in the program itself, not in GitHub releases, not on Flathub.",
+    "istochnik": "Source: ",
+    "otkryt_istochnik": "Open source",
+    "ne_u_vseh_paketov": "Not all packages of this build have this version, so it cannot be installed: packages of different versions would break the system.",
+    "novee": "newer",
+    "starshe": "older",
+    "sayt_programmy": "Website",
+    "kesh": "cache",
+    "arhiv_arch": "Arch archive",
+    "ne_udalos_nayti_fayly": "Could not find the files",
+    "etoy_versii_net_ni": "this version is neither in the cache nor in the Arch archive",
+    "ustanovka": "{name}: installing {version}",
+    "net": "none"
+  },
+  "confirm_repo_remove": {
+    "otmena": "Cancel",
+    "udalit": "Remove",
+    "ubrat_nenuzhnye_zavisimosti": "Remove unneeded dependencies",
+    "pakety_postavlennye_tolko_radi": "packages installed only for this one and no longer needed by anything else",
+    "udalit_2": "Remove {name}?",
+    "paket_udalitsya_iz_sistemy": "The package will be removed from the system; settings in your home folder stay. If other packages need it, pacman will refuse and explain why.",
+    "udalenie": "Removing {name}"
+  },
+  "run_op": {
+    "nachato": "{title}: started",
+    "pacman_seychas_zanyat_drugoy": "pacman is busy with another program, try again later",
+    "dozhdites_okonchaniya_tekuschego_deystviya": "Wait for the current action to finish",
+    "pokazat": "Show",
+    "ne_poluchilos": "{title}: failed",
+    "konsol": "Console"
+  },
+  "download_row": {
+    "ubrat_iz_spiska": "Remove from the list",
+    "konsol_ves_vyvod_s": "Console: the whole output from the start",
+    "kod_podrobnosti_v_konsoli": " (code {code}), details in the console"
+  },
+  "sidebar_downloads": {
+    "idet": "running: {count}",
+    "zagruzki": "Downloads",
+    "oshibka": "error"
+  },
+  "window": {
+    "proverit_zanovo": "Check again",
+    "poisk_ctrl_f": "Search (Ctrl+F)",
+    "nayti_na_vkladke": "Search this page"
+  },
+  "show_console": {
+    "skopirovat_vse": "Copy all",
+    "konsol": "Console: {title}",
+    "vyvod_skopirovan": "Output copied"
+  },
+  "on_snapshot": {
+    "proverka_ne_udalas": "Check failed: {result}"
+  },
+  "build_overview": {
+    "sostoyanie": "Status",
+    "ne_udalos_proverit_obnovleniya": "Could not check for updates",
+    "nuzhna_perezagruzka": "Reboot needed",
+    "posle_zagruzki_obnovilis": "upgraded since boot: {names}",
+    "perezagruzka_ne_nuzhna": "No reboot needed",
+    "vazhnye_pakety_s_posledney": "important packages have not changed since the last boot",
+    "zapuscheno_yadro": "Running kernel",
+    "prochitat_do_obnovleniya": "Read before upgrading",
+    "novosti_arch_gde_upomyanuty": "Arch news that mentions packages from your updates.",
+    "iz_nih_posle_ponadobitsya": "reboot needed after: {reboot_count}",
+    "perezagruzka_posle_nih_ne": "no reboot needed after them",
+    "dostupno_obnovleniy": "Updates available: {count}",
+    "sistema_obnovlena": "System is up to date",
+    "novyh_versiy_v_repozitoriyah": "no new versions in the repositories",
+    "perezagruzka": "reboot",
+    "aur_obnovleniy": "AUR updates: {count}",
+    "aur_proverka_ne_udalas": "AUR: check failed",
+    "flatpak_obnovleniy": "Flatpak updates: {count}",
+    "flatpak_proverka_ne_udalas": "Flatpak: check failed",
+    "kasaetsya": "{date} · affects: {packages}",
+    "takih_novostey_net": "No such news",
+    "svezhie_novosti_arch_ne": "recent Arch news does not mention packages from the update list",
+    "obnovit_vse": "Upgrade all",
+    "paket": " (package {base})"
+  },
+  "show_new": {
+    "ustanovit": "Install"
+  },
+  "fill_new": {
+    "podrobno": "Details",
+    "versiya": "Version",
+    "repozitoriy": "Repository",
+    "skachat": "Download",
+    "zaymet_na_diske": "Installed size",
+    "zavisit_ot": "Depends on",
+    "litsenziya": "License",
+    "sayt": "Website",
+    "podrobnostey_net": "No details",
+    "soprovozhdayuschiy": "Maintainer",
+    "golosov": "Votes",
+    "populyarnost": "{votes}, popularity {popularity}",
+    "dlya_sborki_nuzhno": "Needed to build",
+    "razrabotchik": "Developer",
+    "identifikator": "ID",
+    "net": "none",
+    "obnovlen": "Updated",
+    "stoit_prismotretsya": "Worth a closer look",
+    "opisanie": "Description",
+    "paket_pomechen_ustarevshim_sborka": "The package is flagged out of date: the build may fail.",
+    "u_paketa_net_soprovozhdayuschego": "The package has no maintainer: nobody updates it."
+  },
+  "build_packages": {
+    "obnovleniya_iz_repozitoriev": "Repository updates",
+    "stavyatsya_tolko_vse_vmeste": "Installed only all together, so Arch never ends up partially upgraded.",
+    "ustanovlennye_pakety": "Installed packages",
+    "cherez_poisk_ctrl_f": "Search (Ctrl+F or just start typing) finds any installed package: description, versions, build history, another version, removal.",
+    "obnovit_vse": "Upgrade all",
+    "obnovleniy_net": "No updates",
+    "vse_pakety_svezhie": "all packages are up to date",
+    "perezagruzka": "reboot"
+  },
+  "fill_rollback": {
+    "ustanovlena_v_keshe_versiy": "installed {version} · versions in the cache: {count}",
+    "esche": "{count} more",
+    "utochnite_poisk": "refine the search",
+    "nichego_ne_naydeno": "Nothing found",
+    "bez_poiska_pokazany_pakety": "without a search, packages with older versions in the cache are shown; type a name to find any"
+  },
+  "build_aur": {
+    "obnovleniya_aur": "AUR updates",
+    "pakety_sobirayutsya_na_etom": "Packages are built on this computer. Before upgrading, look at the PKGBUILD changes on the AUR website: from here the build runs without a review.",
+    "pakety_ne_iz_repozitoriev": "Packages not from the repositories",
+    "aur_i_pakety_iz": "AUR and packages from disabled repositories. Pick a package: description, PKGBUILD changes, upgrade, another version and removal.",
+    "paru_ne_ustanovlen": "paru is not installed",
+    "vkladka_aur_rabotaet_cherez": "the AUR page works through paru",
+    "obnovit_aur": "Upgrade AUR",
+    "obnovleniy_net": "No updates",
+    "vse_pakety_iz_aur": "all AUR packages are up to date",
+    "drugih_versiy": " · other versions: {count}"
+  },
+  "build_flatpak": {
+    "obnovleniya_flatpak": "Flatpak updates",
+    "prilozheniya": "Apps",
+    "vyberite_prilozhenie_opisanie_snimki": "Pick an app: description, screenshots, what's new, update and older builds.",
+    "flatpak_ne_ustanovlen": "Flatpak is not installed",
+    "obnovit_vse": "Update all",
+    "obnovleniy_net": "No updates",
+    "prilozheniy_net": "No apps",
+    "obnovlenie_flatpak": "Flatpak update",
+    "vse_prilozheniya_svezhie": "all apps are up to date",
+    "bez_nomera_versii": "no version number"
+  },
+  "show_app": {
+    "drugaya_sborka": "Another build…",
+    "udalit": "Remove",
+    "podrobno": "Details",
+    "ustanovlena_versiya": "Installed version",
+    "hranilische": "Remote",
+    "ustanovka_vetka": "{origin} · {installation} installation · branch {branch}",
+    "identifikator": "ID",
+    "sayt": "Website",
+    "obnovit_do": "Update to {new_version}",
+    "versiya": "Version {version}",
+    "opisanie": "Description",
+    "bez_nomera_versii": "no version number",
+    "litsenziya": "License",
+    "chto_novogo": "What's new",
+    "opisaniya_izmeneniy_net": "No description of changes."
+  },
+  "build_kernels": {
+    "ustanovlennye_yadra": "Installed kernels",
+    "osnovnoe_zagruzhaetsya_pervym_ostalnye": "The default one boots first; the others are chosen in the boot menu. Keep at least one spare.",
+    "dostupnye_yadra": "Available kernels",
+    "iz_podklyuchennyh_repozitoriev_stavyatsya": "From the enabled repositories. Installed together with headers, modules for your devices and a full system upgrade.",
+    "yadra_ne_naydeny": "No kernels found",
+    "ne_udalos_sopostavit_pakety": "could not match kernel packages with /usr/lib/modules",
+    "ustanovleno": "installed {version}",
+    "postavit_nedostayuschie_moduli": "Install missing modules",
+    "stoyat_u_drugogo_yadra": "{modules}: installed for another kernel but not for this one; without r8125 there may be no network",
+    "sdelat_osnovnym": "Make default",
+    "eto_yadro_budet_zagruzhatsya": "this kernel will boot first; the boot menu will be rebuilt",
+    "osnovnoe_yadro_ne_zadano": "The default kernel is not set explicitly",
+    "boot_order_pervym_idet": "BOOT_ORDER: {order}; the first kernel is the one limine puts first by its pattern",
+    "drugih_yader_v_repozitoriyah": "No other kernels in the repositories",
+    "zapuscheno": " · running {release}",
+    "osnovnoe": "default",
+    "zapuscheno_2": "running",
+    "est": "{new} available",
+    "net_moduley": "no modules",
+    "vmeste_s_zagolovkami_i": "together with the headers and modules of this kernel",
+    "proshlyh_versiy_v_keshe": "No older versions in the cache",
+    "novee_ustanovlennoy": "newer than installed; ",
+    "postavit": "Install {version}",
+    "otkatit_na": "Roll back to {version}",
+    "po_umolchaniyu": "default"
+  },
+  "build_history": {
+    "chto_menyalos": "What changed",
+    "zhurnal_pacman_po_dnyam": "The pacman log by day. Pick a day: what was upgraded, installed and removed, with versions and times.",
+    "zhurnal_pacman_pust_ili": "The pacman log is empty or unavailable"
+  },
+  "ask_single_update": {
+    "novaya_zavisimost": "{name} {version} (new dependency)",
+    "otmena": "Cancel",
+    "obnovit": "Upgrade",
+    "ne_udalos_rasschitat_obnovlenie": "Could not work out the upgrade: {result}",
+    "novoy_versii_v_svezhih": "No new version in the fresh package lists: press “Check again”",
+    "obnovit_vsyu_sistemu": "Upgrade the whole system",
+    "obschie_pakety_ne_menyayutsya": "\n\nShared packages do not change, so other programs are not affected.",
+    "paket_nuzhen_i_drugim": " Other packages need it too ({packages}), but they get the same compatible version.",
+    "obnovit_tolko": "Upgrade only {name}?",
+    "otdelno_ne_obnovit": "{name} cannot be upgraded separately",
+    "postavitsya_tolko_eto": "Only this will be installed:\n",
+    "obnovlennye_otdelno_oni_mogut": ". Upgraded separately, they may break programs built against the old ones. Upgrade the whole system.",
+    "obnovlenie": "Upgrading {name}",
+    "novaya_versiya_potyanet_obnovlenie": "The new version pulls in an upgrade of shared packages that other programs use too: "
+  },
+  "inline_progress": {
+    "izmeneniya_primeneny": "changes applied",
+    "podrobnosti_v_konsoli_vnizu": "details in the console"
+  },
+  "downloads_page": {
+    "poka_pusto": "Nothing here yet",
+    "zdes_budut_obnovleniya_ustanovki": "Upgrades, installs and removals started in KeepUp will appear here."
+  },
+  "on_page_selected": {
+    "programma_ili_paket": "App or package",
+    "nayti_na_vkladke": "Search this page"
+  },
+  "build_install": {
+    "chto_postavit": "What to install?",
+    "nachnite_pechatat_poisk_idet": "Start typing: the search covers the repositories, Flathub and the AUR at once."
+  },
+  "show_found": {
+    "ne_udalos_nayti": "Search failed",
+    "ischem": "Searching…",
+    "naydeno": "found: {count}",
+    "pokazat_esche": "Show {count} more",
+    "nichego_ne_naydeno": "Nothing found"
+  },
+  "found_row": {
+    "ustanovlen": "installed"
+  },
+  "aur_row": {
+    "est_obnovlenie": "update available"
+  },
+  "app_row": {
+    "est_obnovlenie": "update available"
+  },
+  "ask_flatpak": {
+    "zagruzhaem_zhurnal_sborok": "Loading the build log…",
+    "sborki_v_hranilische": "Builds on the remote",
+    "sverhu_samaya_novaya": "Newest first.",
+    "zhurnal_ne_zagruzilsya": "The log did not load",
+    "ustanovlena": "installed"
+  },
+  "find": {
+    "v_aur_ischem_ot": "AUR search needs at least {count} letters"
+  },
+  "show_loading": {
+    "proveryaem_sistemu": "Checking the system…"
+  },
+  "show_history_day": {
+    "seychas": "{text} · now {now}",
+    "seychas_ne_ustanovlen": "{text} · not installed now"
+  },
+  "found_where": {
+    "golosov": "votes: {votes}",
+    "pomechen_ustarevshim": "flagged out of date",
+    "bez_soprovozhdayuschego": "no maintainer"
+  },
+  "notes": {
+    "from_metainfo": {
+      "opisanie_versiy_iz_samoy": "release notes from the program itself"
+    },
+    "srcinfo": {
+      "u_etoy_pravki_net": "this change has no .SRCINFO"
+    },
+    "compare_builds": {
+      "novaya_zavisimost": "new dependency: {x}",
+      "ubrana_zavisimost": "dropped dependency: {x}",
+      "novaya_zavisimost_dlya_sborki": "new build dependency: {x}",
+      "ubrana_zavisimost_dlya_sborki": "dropped build dependency: {x}",
+      "novaya_neobyazatelnaya_zavisimost": "new optional dependency: {x}",
+      "ubrana_neobyazatelnaya_zavisimost": "dropped optional dependency: {x}",
+      "predostavlyaet": "provides: {x}",
+      "bolshe_ne_predostavlyaet": "no longer provides: {x}",
+      "konfliktuet_s": "conflicts with: {x}",
+      "bolshe_ne_konfliktuet_s": "no longer conflicts with: {x}"
+    },
+    "_github_notes": {
+      "vypusk_na_github": "GitHub release ({owner}/{repo})"
+    },
+    "from_flathub": {
+      "zhurnal_izmeneniy_programmy_na": "the program's changelog on Flathub ({app_id})"
+    },
+    "collect": {
+      "versiya": "version {old} → {version}"
+    }
+  },
+  "aur": {
+    "list_updates": {
+      "paru_zavershilsya_s_oshibkoy": "paru failed"
+    }
+  },
+  "flatpak": {
+    "with_updates": {
+      "flatpak_remote_ls_zavershilsya": "flatpak remote-ls failed",
+      "novaya_sborka": "new build"
+    },
+    "history": {
+      "flatpak_remote_info_zavershilsya": "flatpak remote-info failed"
+    }
+  },
+  "pacman": {
+    "list_updates": {
+      "checkupdates_zavershilsya_s_oshibkoy": "checkupdates failed"
+    },
+    "single_update_plan": {
+      "pacman_ne_smog_rasschitat": "pacman could not work out the upgrade"
+    }
+  },
+  "translate": {
+    "translate": {
+      "perevodchik_ne_otvetil": "the translator did not respond"
+    }
+  },
+  "progress": {
+    "stage": {
+      "waiting": "Waiting for password confirmation",
+      "prepare": "Preparing",
+      "deps": "Resolving dependencies",
+      "sources": "Downloading sources",
+      "build": "Building",
+      "package": "Packaging",
+      "sync": "Refreshing package lists",
+      "download": "Downloading",
+      "check": "Checking",
+      "install": "Installing",
+      "hooks": "Configuring the system"
+    },
+    "action": {
+      "upgrade": "Upgrading: {name}",
+      "install": "Installing: {name}",
+      "remove": "Removing: {name}",
+      "reinstall": "Reinstalling: {name}",
+      "downgrade": "Downgrading: {name}"
+    },
+    "step": "Step {done} of {total}"
+  }
+}
