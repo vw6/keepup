@@ -540,7 +540,9 @@ class Window(Adw.ApplicationWindow):
             else:
                 self.search_entry.set_placeholder_text('Найти на вкладке')
                 if was_install:
+                    # Строку открыла сама вкладка «Установить», поэтому и закрываем её, уходя.
                     self.search_entry.set_text('')
+                    self.search_bar.set_search_mode(False)
         GLib.idle_add(self.apply_filter)
         self.content_title.set_title(title)
         self.content_page.set_title(title)
