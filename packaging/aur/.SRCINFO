@@ -1,6 +1,6 @@
 pkgbase = keepup
 	pkgdesc = GNOME-style updates, versions and rollbacks for Arch, AUR and Flatpak
-	pkgver = 0.3.2
+	pkgver = 0.3.3
 	pkgrel = 1
 	url = https://github.com/vw6/keepup
 	arch = any
@@ -18,7 +18,7 @@ pkgbase = keepup
 	optdepends = git: building previous AUR versions
 	optdepends = base-devel: building AUR packages
 	optdepends = limine-mkinitcpio-hook: choosing the default kernel in Limine
-	source = keepup-0.3.2.tar.gz::https://github.com/vw6/keepup/archive/refs/tags/v0.3.2.tar.gz
-	sha256sums = b4c32cd92f13c47a5dd7f4b90573c99857add485787caff3e8eb50f1bc4dd2cd
+	source = keepup-0.3.3.tar.gz::https://github.com/vw6/keepup/archive/refs/tags/v0.3.3.tar.gz
+	sha256sums = 2d12a27a047216bcd22e3072e07fdab9b1ed38c58a20157fc8656a2321b21898
 
 pkgname = keepup
