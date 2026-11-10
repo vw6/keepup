@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from .i18n import tr
 
 COUNTER = re.compile(r'^\(\s*(\d+)/(\d+)\)\s*(.*)$')
+# Без терминала pacman не рисует полоски загрузки, а пишет строку на каждый файл; доля считается по их числу
+# против числа пакетов из списка перед вопросом («Пакеты (139)», в табличном виде «Пакет (139)»).
+PACKAGES = re.compile(r'^(?:Пакеты|Пакет|Packages|Package)\s+\((\d+)\)', re.I)
+FILE_DOWNLOAD = re.compile(r'^\S+\s+(?:загружаем|downloading)\.\.\.$', re.I)
 # Этапы: (шаблон строки, этап). Вывод бывает и по-русски, и по-английски, в зависимости от языка системы.
 # Название этапа для человека берётся из перевода: progress.stage.<этап>.
 STAGES = [
@@ -12,7 +16,7 @@ STAGES = [
     (re.compile(r'Получение исходных файлов|Retrieving sources', re.I), 'sources'),
     (re.compile(r'Запускается build\(\)|Starting build\(\)|Сборка пакета|Making package', re.I), 'build'),
     (re.compile(r'Создание пакета|Creating package|Сжатие пакета|Compressing package', re.I), 'package'),
-    (re.compile(r'загрузка файлов пакетов|загрузка|Retrieving packages|downloading', re.I), 'download'),
+    (re.compile(r'загрузка файлов пакетов|загрузка|загружаем|Получение пакетов|Retrieving packages|downloading', re.I), 'download'),
     (re.compile(r'проверка связки ключей|проверка целостности|checking keyring|checking package integrity|'
                 r'проверка возможных конфликтов|checking for file conflicts|проверка доступного|checking available', re.I), 'check'),
     (re.compile(r'Обработка изменений пакета|Processing package changes', re.I), 'install'),
@@ -32,6 +36,8 @@ class State:
     stage: str = 'waiting'
     detail: str = ''
     fraction: float | None = None   # None: доля неизвестна, полоска «бежит»
+    packages: int = 0               # сколько пакетов в действии, если pacman это сказал
+    downloaded: int = 0
 
 
 def label(state):
@@ -46,6 +52,9 @@ def feed(state, line):
     before = (state.stage, state.detail, state.fraction)
     if state.stage == 'waiting':
         state.stage = 'prepare'
+    p = PACKAGES.match(text)
+    if p:
+        state.packages = int(p.group(1))
     m = ACTION.match(text)
     if m:
         state.stage = 'install' if state.stage != 'hooks' else state.stage
@@ -61,6 +70,11 @@ def feed(state, line):
                     state.detail = ''
                 state.fraction = None
             break
+    if FILE_DOWNLOAD.match(text):
+        state.downloaded += 1
+        state.detail = text.split()[0]
+        if state.packages:
+            state.fraction = min(1.0, state.downloaded / state.packages)
     c = COUNTER.match(text)
     if c:
         done, total = int(c.group(1)), int(c.group(2))

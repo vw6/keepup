@@ -362,7 +362,6 @@
     "dostupno_obnovleniy": "Updates available: {count}",
     "sistema_obnovlena": "System is up to date",
     "novyh_versiy_v_repozitoriyah": "no new versions in the repositories",
-    "perezagruzka": "reboot",
     "aur_obnovleniy": "AUR updates: {count}",
     "aur_proverka_ne_udalas": "AUR: check failed",
     "flatpak_obnovleniy": "Flatpak updates: {count}",
@@ -371,7 +370,8 @@
     "takih_novostey_net": "No such news",
     "svezhie_novosti_arch_ne": "recent Arch news does not mention packages from the update list",
     "obnovit_vse": "Upgrade all",
-    "paket": " (package {base})"
+    "paket": " (package {base})",
+    "perezagruzit": "Restart"
   },
   "show_new": {
     "ustanovit": "Install"
@@ -638,5 +638,12 @@
       "downgrade": "Downgrading: {name}"
     },
     "step": "Step {done} of {total}"
+  },
+  "confirm_reboot": {
+    "perezagruzit_kompyuter": "Restart the computer?",
+    "nesohranennoe_propadet": "Open applications will close, unsaved work will be lost.",
+    "idet_deystvie": "A package action is running. Wait for it to finish: restarting in the middle of an update can break the system.",
+    "otmena": "Cancel",
+    "perezagruzit": "Restart"
   }
 }

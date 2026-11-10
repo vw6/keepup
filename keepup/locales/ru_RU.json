@@ -363,7 +363,6 @@
     "dostupno_obnovleniy": "Доступно обновлений: {count}",
     "sistema_obnovlena": "Система обновлена",
     "novyh_versiy_v_repozitoriyah": "новых версий в репозиториях нет",
-    "perezagruzka": "перезагрузка",
     "aur_obnovleniy": "AUR: обновлений {count}",
     "aur_proverka_ne_udalas": "AUR: проверка не удалась",
     "flatpak_obnovleniy": "Flatpak: обновлений {count}",
@@ -372,7 +371,8 @@
     "takih_novostey_net": "Таких новостей нет",
     "svezhie_novosti_arch_ne": "свежие новости Arch не упоминают пакеты из списка обновлений",
     "obnovit_vse": "Обновить всё",
-    "paket": " (пакет {base})"
+    "paket": " (пакет {base})",
+    "perezagruzit": "Перезагрузить"
   },
   "show_new": {
     "ustanovit": "Установить"
@@ -639,5 +639,12 @@
       "downgrade": "Откат: {name}"
     },
     "step": "Шаг {done} из {total}"
+  },
+  "confirm_reboot": {
+    "perezagruzit_kompyuter": "Перезагрузить компьютер?",
+    "nesohranennoe_propadet": "Открытые программы закроются, несохранённое пропадёт.",
+    "idet_deystvie": "Сейчас идёт действие с пакетами. Дождитесь его окончания: перезагрузка посреди обновления может сломать систему.",
+    "otmena": "Отмена",
+    "perezagruzit": "Перезагрузить"
   }
 }

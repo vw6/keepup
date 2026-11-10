@@ -36,6 +36,11 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.4" date="2026-11-10">
+      <description>
+        <p>Download progress is shown while pacman fetches packages (it was stuck on dependency resolution). Restart button in the overview when a reboot is needed; overview rows have icons.</p>
+      </description>
+    </release>
     <release version="0.4.3" date="2026-11-10">
       <description>
         <p>Actions started while another one is running are queued and start on their own; a queued action can be removed from the queue.</p>

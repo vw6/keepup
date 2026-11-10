@@ -1,5 +1,6 @@
 """Главное окно: боковые вкладки «Обзор», «Установить», «Новости», «Пакеты», «AUR», «Flatpak», «Ядра», «История»."""
 import os
+import subprocess
 import threading
 from collections import defaultdict
 from datetime import datetime
@@ -683,7 +684,9 @@ class Window(Adw.ApplicationWindow):
             names = ', '.join(sorted({e.name for e in s.reboot})[:6])
             r = row(tr('build_overview.nuzhna_perezagruzka'), tr('build_overview.posle_zagruzki_obnovilis', names=names))
             r.add_prefix(Gtk.Image(icon_name='system-reboot-symbolic'))
-            r.add_suffix(pill(tr('build_overview.perezagruzka'), 'warn'))
+            button = Gtk.Button(label=tr('build_overview.perezagruzit'), valign=Gtk.Align.CENTER)
+            button.connect('clicked', lambda *_: self.confirm_reboot())
+            r.add_suffix(button)
         else:
             r = row(tr('build_overview.perezagruzka_ne_nuzhna'), tr('build_overview.vazhnye_pakety_s_posledney'))
             r.add_prefix(Gtk.Image(icon_name='object-select-symbolic'))
@@ -692,6 +695,7 @@ class Window(Adw.ApplicationWindow):
         if s.aur_updates or s.aur_error:
             r = row(tr('build_overview.aur_obnovleniy', count=len(s.aur_updates)) if not s.aur_error else tr('build_overview.aur_proverka_ne_udalas'),
                     s.aur_error or ', '.join(u.name for u in s.aur_updates[:5]), activatable=True)
+            r.add_prefix(Gtk.Image(icon_name='application-x-addon-symbolic'))
             r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
             r.connect('activated', lambda *_: self.open_page('aur'))
             state.add(r)
@@ -699,12 +703,15 @@ class Window(Adw.ApplicationWindow):
         if flat_new or s.flatpak_error:
             r = row(tr('build_overview.flatpak_obnovleniy', count=len(flat_new)) if not s.flatpak_error else tr('build_overview.flatpak_proverka_ne_udalas'),
                     s.flatpak_error or ', '.join(a.name for a in flat_new[:5]), activatable=True)
+            r.add_prefix(Gtk.Image(icon_name='applications-system-symbolic'))
             r.add_suffix(Gtk.Image(icon_name='go-next-symbolic'))
             r.connect('activated', lambda *_: self.open_page('flatpak'))
             state.add(r)
 
         release, base = s.kernel
-        state.add(row(tr('build_overview.zapuscheno_yadro'), f'{release}' + (tr('build_overview.paket', base=base) if base else '')))
+        r = row(tr('build_overview.zapuscheno_yadro'), f'{release}' + (tr('build_overview.paket', base=base) if base else ''))
+        r.add_prefix(Gtk.Image(icon_name='computer-symbolic'))
+        state.add(r)
 
         touching = [n for n in s.news if n.touches]
         news_group = Adw.PreferencesGroup(title=tr('build_overview.prochitat_do_obnovleniya'),
@@ -2278,6 +2285,18 @@ class Window(Adw.ApplicationWindow):
         dialog.set_response_appearance('go', Adw.ResponseAppearance.SUGGESTED)
         dialog.connect('response', lambda _d, resp: resp == 'go' and self.run_op(tr('confirm_upgrade.obnovlenie_sistemy'), ops.upgrade_command()))
         dialog.present(self)
+
+    def confirm_reboot(self):
+        busy = self.operation is not None and not self.operation.finished
+        ask = Adw.AlertDialog(heading=tr('confirm_reboot.perezagruzit_kompyuter'),
+                              body=tr('confirm_reboot.idet_deystvie') if busy else tr('confirm_reboot.nesohranennoe_propadet'))
+        ask.add_response('cancel', tr('confirm_reboot.otmena'))
+        if not busy:
+            ask.add_response('go', tr('confirm_reboot.perezagruzit'))
+            ask.set_response_appearance('go', Adw.ResponseAppearance.DESTRUCTIVE)
+        ask.set_default_response('cancel')
+        ask.connect('response', lambda _d, resp: resp == 'go' and subprocess.Popen(['systemctl', 'reboot']))
+        ask.present(self)
 
     def run_op(self, title, cmd, pacman_lock=True):
         # Пока идёт наше действие, новое встаёт в очередь и начнётся само; чужой pacman по-прежнему повод отказать.

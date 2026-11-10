@@ -258,6 +258,19 @@ class Progress(unittest.TestCase):
         progress.feed(a, 'обновление amneziavpn-bin...')
         self.assertEqual((a.stage, a.detail), ('install', 'Обновление: amneziavpn-bin'))
 
+    def test_download_without_terminal(self):
+        # Без терминала русский pacman пишет «Получение пакетов...» и строку «<файл> загружаем...» на каждый пакет.
+        from keepup import progress
+        s = progress.State()
+        for line in ['разрешение зависимостей...', 'Пакет (4)   Старая версия  Новая версия', ':: Приступить к установке? [Y/n]',
+                     ':: Получение пакетов...']:
+            progress.feed(s, line)
+        self.assertEqual((s.stage, s.packages), ('download', 4))
+        progress.feed(s, ' rsync-3.5.2-3-x86_64.pkg.tar.zst загружаем...')
+        self.assertEqual((s.downloaded, s.fraction, s.detail), (1, 0.25, 'rsync-3.5.2-3-x86_64.pkg.tar.zst'))
+        progress.feed(s, ' sudo-1.9.17.p2-7-x86_64.pkg.tar.zst downloading...')
+        self.assertEqual(s.fraction, 0.5)
+
 
 class FindNew(unittest.TestCase):
     def test_pacman_ss(self):
