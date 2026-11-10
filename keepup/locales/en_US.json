@@ -58,7 +58,8 @@
     "ne_poluchilos": "Failed",
     "gotovo": "Done",
     "otmeneno_parol_ne_vveden": "Cancelled: password not entered",
-    "net_prav_na_eto": "Not allowed to do this"
+    "net_prav_na_eto": "Not allowed to do this",
+    "v_ocheredi": "Queued"
   },
   "on_downloads_selected": {
     "zagruzki": "Downloads"
@@ -316,20 +317,22 @@
   "run_op": {
     "nachato": "{title}: started",
     "pacman_seychas_zanyat_drugoy": "pacman is busy with another program, try again later",
-    "dozhdites_okonchaniya_tekuschego_deystviya": "Wait for the current action to finish",
     "pokazat": "Show",
     "ne_poluchilos": "{title}: failed",
-    "konsol": "Console"
+    "konsol": "Console",
+    "v_ocheredi": "{title}: queued"
   },
   "download_row": {
     "ubrat_iz_spiska": "Remove from the list",
     "konsol_ves_vyvod_s": "Console: the whole output from the start",
-    "kod_podrobnosti_v_konsoli": " (code {code}), details in the console"
+    "kod_podrobnosti_v_konsoli": " (code {code}), details in the console",
+    "snyat_s_ocheredi": "Remove from queue"
   },
   "sidebar_downloads": {
     "idet": "running: {count}",
     "zagruzki": "Downloads",
-    "oshibka": "error"
+    "oshibka": "error",
+    "v_ocheredi": " · queued: {count}"
   },
   "window": {
     "proverit_zanovo": "Check again",
@@ -504,7 +507,8 @@
   },
   "inline_progress": {
     "izmeneniya_primeneny": "changes applied",
-    "podrobnosti_v_konsoli_vnizu": "details in the console"
+    "podrobnosti_v_konsoli_vnizu": "details in the console",
+    "nachnyotsya_posle_tekuschego": "starts after the current action"
   },
   "downloads_page": {
     "poka_pusto": "Nothing here yet",

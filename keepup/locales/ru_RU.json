@@ -59,7 +59,8 @@
     "ne_poluchilos": "Не получилось",
     "gotovo": "Готово",
     "otmeneno_parol_ne_vveden": "Отменено: пароль не введён",
-    "net_prav_na_eto": "Нет прав на это действие"
+    "net_prav_na_eto": "Нет прав на это действие",
+    "v_ocheredi": "В очереди"
   },
   "on_downloads_selected": {
     "zagruzki": "Загрузки"
@@ -317,20 +318,22 @@
   "run_op": {
     "nachato": "{title}: начато",
     "pacman_seychas_zanyat_drugoy": "pacman сейчас занят другой программой, попробуйте позже",
-    "dozhdites_okonchaniya_tekuschego_deystviya": "Дождитесь окончания текущего действия",
     "pokazat": "Показать",
     "ne_poluchilos": "{title}: не получилось",
-    "konsol": "Консоль"
+    "konsol": "Консоль",
+    "v_ocheredi": "{title}: в очереди"
   },
   "download_row": {
     "ubrat_iz_spiska": "Убрать из списка",
     "konsol_ves_vyvod_s": "Консоль: весь вывод с начала",
-    "kod_podrobnosti_v_konsoli": " (код {code}), подробности в консоли"
+    "kod_podrobnosti_v_konsoli": " (код {code}), подробности в консоли",
+    "snyat_s_ocheredi": "Снять с очереди"
   },
   "sidebar_downloads": {
     "idet": "идёт: {count}",
     "zagruzki": "Загрузки",
-    "oshibka": "ошибка"
+    "oshibka": "ошибка",
+    "v_ocheredi": " · в очереди: {count}"
   },
   "window": {
     "proverit_zanovo": "Проверить заново",
@@ -505,7 +508,8 @@
   },
   "inline_progress": {
     "izmeneniya_primeneny": "изменения применены",
-    "podrobnosti_v_konsoli_vnizu": "подробности в консоли внизу"
+    "podrobnosti_v_konsoli_vnizu": "подробности в консоли внизу",
+    "nachnyotsya_posle_tekuschego": "начнётся после текущего действия"
   },
   "downloads_page": {
     "poka_pusto": "Пока пусто",

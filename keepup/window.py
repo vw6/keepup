@@ -155,15 +155,33 @@ def _result(future):
 class Operation:
     """Действие с правами: команда идёт в фоне, ход и весь вывод доступны всем, кто подписан (строка внизу окна,
     полоска на месте кнопок страницы). Вывод копится с самого начала, даже пока консоль не открыта."""
-    def __init__(self, title, cmd, on_finished):
+    def __init__(self, title, cmd, on_finished, start=True):
         self.title = title
+        self.cmd = cmd
         self.state = progress.State()
         self.overall = progress.Overall()
         self.buffer = Gtk.TextBuffer()
         self.code = None
+        self.started = False
+        self.cancelled = False
         self.listeners = []
         self.on_finished = on_finished
-        ops.run(cmd, self._line, self._done)
+        if start:
+            self.start()
+
+    def start(self):
+        self.started = True
+        self._notify()
+        ops.run(self.cmd, self._line, self._done)
+
+    def cancel(self):
+        """Снять с очереди: только для ещё не начатого действия."""
+        if not self.started:
+            self.cancelled = True
+
+    @property
+    def queued(self):
+        return not self.started and not self.cancelled
 
     def listen(self, fn):
         self.listeners.append(fn)
@@ -210,11 +228,15 @@ class InlineProgress(Gtk.Box):
         op.listen(self._show)
 
     def _pulse(self, op):
-        if not op.finished and op.overall.value <= 0:
+        if op.started and not op.finished and op.overall.value <= 0:
             self.bar.pulse()
-        return not op.finished
+        return not op.finished and not op.cancelled
 
     def _show(self, op):
+        if op.queued:
+            self.stage.set_label(tr('operation.v_ocheredi'))
+            self.detail.set_label(tr('inline_progress.nachnyotsya_posle_tekuschego'))
+            return
         if op.finished:
             self.stage.set_label(op.result())
             self.stage.remove_css_class('error')
@@ -262,11 +284,21 @@ class DownloadRow(Gtk.Box):
         op.listen(self._show)
 
     def _pulse(self):
-        if not self.op.finished and self.op.overall.value <= 0:
+        if self.op.started and not self.op.finished and self.op.overall.value <= 0:
             self.bar.pulse()
-        return not self.op.finished
+        return not self.op.finished and not self.op.cancelled
 
     def _show(self, op):
+        if op.queued:
+            self.icon.set_child(Gtk.Image(icon_name='alarm-symbolic'))
+            self.stage.set_label(tr('operation.v_ocheredi'))
+            self.bar.set_visible(False)
+            self.remove_button.set_tooltip_text(tr('download_row.snyat_s_ocheredi'))
+            self.remove_button.set_visible(True)
+            return
+        self.bar.set_visible(True)
+        self.remove_button.set_tooltip_text(tr('download_row.ubrat_iz_spiska'))
+        self.remove_button.set_visible(False)
         if op.finished:
             ok = op.code == 0
             icon = Gtk.Image(icon_name='object-select-symbolic' if ok else 'dialog-error-symbolic')
@@ -307,6 +339,7 @@ class DownloadsPage(Gtk.Stack):
         op.listen(lambda _op: self.on_change())
 
     def _remove(self, row):
+        row.op.cancel()
         self.ops.remove(row.op)
         self.list.remove(row.get_parent())
         if not self.ops:
@@ -314,7 +347,10 @@ class DownloadsPage(Gtk.Stack):
         self.on_change()
 
     def running(self):
-        return [op for op in self.ops if not op.finished]
+        return [op for op in self.ops if op.started and not op.finished]
+
+    def waiting(self):
+        return [op for op in self.ops if op.queued]
 
 
 class SidebarDownloads(Gtk.Box):
@@ -341,7 +377,9 @@ class SidebarDownloads(Gtk.Box):
         self.icon.set_child(self.spinner if running else self.idle_icon)
         self.bar.set_visible(bool(running))
         if running:
-            self.badge.set_label(tr('sidebar_downloads.idet', count=len(running)))
+            waiting = len(page.waiting())
+            self.badge.set_label(tr('sidebar_downloads.idet', count=len(running))
+                                 + (tr('sidebar_downloads.v_ocheredi', count=waiting) if waiting else ''))
             self.badge.set_visible(True)
             value = min(op.overall.value for op in running)
             if value > 0:
@@ -403,6 +441,7 @@ class Window(Adw.ApplicationWindow):
         self.nav = Adw.NavigationView(vexpand=True)
         self.nav.add(Adw.NavigationPage(title=PAGES[0][1], tag='root', child=content))
         self.operation = None
+        self.queue = []
         self.anchors = {}
         self.tab_pages = {}
         self.content_page = Adw.NavigationPage(title=PAGES[0][1], child=self.nav)
@@ -2241,11 +2280,10 @@ class Window(Adw.ApplicationWindow):
         dialog.present(self)
 
     def run_op(self, title, cmd, pacman_lock=True):
-        if pacman_lock and ops.busy():
+        # Пока идёт наше действие, новое встаёт в очередь и начнётся само; чужой pacman по-прежнему повод отказать.
+        busy = self.operation is not None and not self.operation.finished
+        if pacman_lock and ops.busy() and not busy:
             self.toast(tr('run_op.pacman_seychas_zanyat_drugoy'))
-            return
-        if self.operation and not self.operation.finished:
-            self.toast(tr('run_op.dozhdites_okonchaniya_tekuschego_deystviya'))
             return
 
         def done(code):
@@ -2254,12 +2292,18 @@ class Window(Adw.ApplicationWindow):
             elif code not in (126, 127):
                 toast = Adw.Toast(timeout=0, use_markup=False, button_label=tr('run_op.konsol'))
                 toast.set_title(tr('run_op.ne_poluchilos', title=title))
-                toast.connect('button-clicked', lambda *_: self.show_console(self.operation))
+                toast.connect('button-clicked', lambda *_: self.show_console(op))
                 self.toasts.add_toast(toast)
-        self.operation = Operation(title, cmd, done)
-        self.downloads.add(self.operation)
+            self._start_next()
+        op = Operation(title, cmd, done, start=not busy)
+        op.pacman_lock = pacman_lock
+        self.downloads.add(op)
+        if busy:
+            self.queue.append(op)
+        else:
+            self.operation = op
         toast = Adw.Toast(timeout=4, use_markup=False, button_label=tr('run_op.pokazat'))
-        toast.set_title(tr('run_op.nachato', title=title))
+        toast.set_title(tr('run_op.v_ocheredi' if busy else 'run_op.nachato', title=title))
         toast.connect('button-clicked', lambda *_: self.open_downloads())
         self.toasts.add_toast(toast)
         page = self.nav.get_visible_page()
@@ -2267,7 +2311,22 @@ class Window(Adw.ApplicationWindow):
         if anchor is not None and anchor.get_parent() is not None:
             # Кнопки страницы на время действия превращаются в полоску хода.
             anchor.set_visible(False)
-            anchor.get_parent().insert_child_after(InlineProgress(self.operation), anchor)
+            anchor.get_parent().insert_child_after(InlineProgress(op), anchor)
+
+    def _start_next(self):
+        """Начать первое из очереди; снятые с очереди пропускаются, чужой pacman выжидается."""
+        while self.queue and self.queue[0].cancelled:
+            self.queue.pop(0)
+        if not self.queue:
+            return
+        nxt = self.queue[0]
+        if nxt.pacman_lock and ops.busy():
+            GLib.timeout_add_seconds(2, lambda: self._start_next() and False)
+            return
+        self.queue.pop(0)
+        self.operation = nxt
+        nxt.start()
+        self.downloads.on_change()
 
 
 class _VerKey:
