@@ -13,7 +13,7 @@ from .window import Window  # noqa: E402
 
 
 def main():
-    # --page ВКЛАДКА открывает окно сразу на ней: overview, news, packages, aur, flatpak, kernels, history.
+    # --page ВКЛАДКА открывает окно сразу на ней: overview, news, packages, aur, flatpak, appimage, kernels, history.
     args = sys.argv[1:]
     page = args[args.index('--page') + 1] if '--page' in args[:-1] else 'overview'
     # KEEPUP_SEPARATE=1 запускает отдельный экземпляр, не трогая уже открытое окно (для проверок).

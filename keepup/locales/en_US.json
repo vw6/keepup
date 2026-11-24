@@ -645,5 +645,25 @@
     "idet_deystvie": "A package action is running. Wait for it to finish: restarting in the middle of an update can break the system.",
     "otmena": "Cancel",
     "perezagruzit": "Restart"
+  },
+  "build_appimage": {
+    "opisanie": "Single-file apps. KeepUp moves the image into its own hidden folder (~/.local/share/keepup/appimages) and adds a menu entry with the icon from the image itself, so the taskbar shows the right icon too. You can drag an image here from Files.",
+    "dobavit": "Add AppImage…",
+    "poka_net": "Nothing here yet",
+    "peretashchite": "Add an image with the button or drop a .AppImage file on this tab",
+    "fayl_propal": "file is missing",
+    "otkryt": "Open",
+    "udalit": "Remove",
+    "vyberite_obraz": "Choose an AppImage",
+    "dobavlyaem": "Adding {name}…",
+    "ne_obraz": "this is not a type 2 AppImage",
+    "net_yarlyka": "the image has no .desktop entry",
+    "ne_udalos": "Failed: {reason}",
+    "obnovlen": "{name} updated",
+    "dobavlen": "{name} added to the menu",
+    "ne_zapustilsya": "Failed to start: {reason}",
+    "udalit_2": "Remove {name}?",
+    "udalit_opisanie": "The image and its menu entry will be removed. The app's own settings in your home folder stay.",
+    "udalen": "{name} removed"
   }
 }

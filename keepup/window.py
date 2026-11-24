@@ -1,4 +1,4 @@
-"""Главное окно: боковые вкладки «Обзор», «Установить», «Новости», «Пакеты», «AUR», «Flatpak», «Ядра», «История»."""
+"""Главное окно: боковые вкладки «Обзор», «Установить», «Новости», «Пакеты», «AUR», «Flatpak», «AppImage», «Ядра», «История»."""
 import os
 import subprocess
 import threading
@@ -10,9 +10,10 @@ import gi
 
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Adw, Gdk, GLib, GObject, Gtk, Pango  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango  # noqa: E402
 
-from . import NAME, appstream, archive, aur, flatpak, kernels, news, notes, ops, pacman, progress, search, translate  # noqa: E402
+from . import NAME, appimages, appstream, archive, aur, flatpak, kernels, news, notes, ops, pacman, progress, search, translate  # noqa: E402
+from . import i18n  # noqa: E402
 from .i18n import tr  # noqa: E402
 
 PAGES = [
@@ -22,6 +23,7 @@ PAGES = [
     ('packages', tr('pages.pakety'), 'system-software-install-symbolic'),
     ('aur', 'AUR', 'application-x-addon-symbolic'),
     ('flatpak', 'Flatpak', 'applications-system-symbolic'),
+    ('appimage', 'AppImage', 'application-x-executable-symbolic'),
     ('kernels', tr('pages.yadra'), 'computer-symbolic'),
     ('history', tr('pages.istoriya'), 'document-open-recent-symbolic'),
 ]
@@ -627,7 +629,7 @@ class Window(Adw.ApplicationWindow):
         if self.find_query:
             self.find(self.find_query, delay=0, again=True)
         for key, build in (('overview', self.build_overview), ('news', self.build_news), ('packages', self.build_packages),
-                           ('aur', self.build_aur), ('flatpak', self.build_flatpak),
+                           ('aur', self.build_aur), ('flatpak', self.build_flatpak), ('appimage', self.build_appimage),
                            ('kernels', self.build_kernels), ('history', self.build_history)):
             self.holders[key].set_child(build())
         self.apply_filter()
@@ -1787,6 +1789,108 @@ class Window(Adw.ApplicationWindow):
         ask.present(self)
 
     # Ядра
+
+    # AppImage: образ одним файлом переезжает в свою скрытую папку, в меню появляется ярлык со значком из образа.
+
+    def build_appimage(self):
+        page = Adw.PreferencesPage()
+        group = Adw.PreferencesGroup(title='AppImage', description=tr('build_appimage.opisanie'))
+        button = Gtk.Button(label=tr('build_appimage.dobavit'), valign=Gtk.Align.CENTER)
+        button.add_css_class('suggested-action')
+        button.connect('clicked', lambda *_: self.pick_appimage())
+        group.set_header_suffix(button)
+        apps = appimages.installed()
+        for app in apps:
+            group.add(self.appimage_row(app))
+        if not apps:
+            group.add(row(tr('build_appimage.poka_net'), tr('build_appimage.peretashchite')))
+        page.add(group)
+        # Образ можно просто бросить на вкладку из «Файлов».
+        drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
+        drop.connect('drop', lambda _t, value, _x, _y: [self.add_appimage(f.get_path()) for f in value.get_files() if f.get_path()] and True)
+        page.add_controller(drop)
+        return page
+
+    def appimage_row(self, app):
+        details = ' · '.join(x for x in (app.version, GLib.format_size(app.size) if app.size else tr('build_appimage.fayl_propal')) if x)
+        r = row(app.name, (app.comment + '\n' if app.comment else '') + details)
+        r.add_prefix(_pkg_icon(app.icon, 40))
+        run = Gtk.Button(label=tr('build_appimage.otkryt'), valign=Gtk.Align.CENTER, sensitive=bool(app.size))
+        run.connect('clicked', lambda *_: self.launch_appimage(app))
+        r.add_suffix(run)
+        remove = Gtk.Button(label=tr('build_appimage.udalit'), valign=Gtk.Align.CENTER)
+        remove.add_css_class('destructive-action')
+        remove.connect('clicked', lambda *_: self.confirm_appimage_remove(app))
+        r.add_suffix(remove)
+        return r
+
+    def pick_appimage(self):
+        dialog = Gtk.FileDialog(title=tr('build_appimage.vyberite_obraz'))
+        filt = Gtk.FileFilter(name='AppImage')
+        filt.add_pattern('*.AppImage')
+        filt.add_pattern('*.appimage')
+        filt.add_mime_type('application/vnd.appimage')
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(filt)
+        dialog.set_filters(filters)
+        dialog.set_default_filter(filt)
+        downloads = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD)
+        if downloads:
+            dialog.set_initial_folder(Gio.File.new_for_path(downloads))
+
+        def chosen(d, result):
+            try:
+                f = d.open_finish(result)
+            except GLib.Error:
+                return
+            if f and f.get_path():
+                self.add_appimage(f.get_path())
+        dialog.open(self, None, chosen)
+
+    def add_appimage(self, path):
+        self.toast(tr('build_appimage.dobavlyaem', name=os.path.basename(path)))
+        background(lambda: appimages.add(path, lang=i18n.language()), self.on_appimage_added)
+
+    def on_appimage_added(self, result):
+        if isinstance(result, appimages.AppImageError):
+            reason = {'not-appimage': tr('build_appimage.ne_obraz'), 'no-desktop': tr('build_appimage.net_yarlyka')}.get(str(result), str(result))
+            self.toast(tr('build_appimage.ne_udalos', reason=reason))
+        elif isinstance(result, Exception):
+            self.toast(tr('build_appimage.ne_udalos', reason=result))
+        else:
+            app, replaced = result
+            self.toast(tr('build_appimage.obnovlen' if replaced else 'build_appimage.dobavlen', name=app.name))
+        self.holders['appimage'].set_child(self.build_appimage())
+        self.apply_filter()
+
+    def launch_appimage(self, app):
+        info = Gio.DesktopAppInfo.new_from_filename(appimages.desktop_path(app))
+        try:
+            if info is None:
+                raise GLib.Error(appimages.desktop_path(app))
+            info.launch([], self.get_display().get_app_launch_context())
+        except GLib.Error as e:
+            self.toast(tr('build_appimage.ne_zapustilsya', reason=e.message if hasattr(e, 'message') else e))
+
+    def confirm_appimage_remove(self, app):
+        ask = Adw.AlertDialog(heading=tr('build_appimage.udalit_2', name=app.name), body=tr('build_appimage.udalit_opisanie'))
+        ask.add_response('cancel', tr('confirm_app_remove.otmena'))
+        ask.add_response('go', tr('build_appimage.udalit'))
+        ask.set_response_appearance('go', Adw.ResponseAppearance.DESTRUCTIVE)
+        ask.set_default_response('cancel')
+
+        def answer(_d, resp):
+            if resp != 'go':
+                return
+            try:
+                appimages.remove(app)
+                self.toast(tr('build_appimage.udalen', name=app.name))
+            except OSError as e:
+                self.toast(tr('build_appimage.ne_udalos', reason=e))
+            self.holders['appimage'].set_child(self.build_appimage())
+            self.apply_filter()
+        ask.connect('response', answer)
+        ask.present(self)
 
     def build_kernels(self):
         s = self.snap

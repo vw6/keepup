@@ -29,6 +29,8 @@
 
 У каждого пакета, из репозиториев или из AUR, и у каждого приложения Flatpak есть своя страница: описание, снимки экрана, история версий и примечания к выпуску из самой программы, выпусков GitHub или каталога Flathub. Отсюда можно обновить один пакет, если это не тянет обновление общих библиотек, поставить любую прошлую версию из кэша pacman, архива Arch или правки PKGBUILD в AUR, удалить пакет. Пакеты одной сборки (например, все части mesa) ставятся и откатываются только вместе.
 
+Вкладка «AppImage» ставит программы одним файлом: выберите образ или перетащите его на вкладку, и KeepUp перенесёт файл в свою скрытую папку `~/.local/share/keepup/appimages`, достанет из образа его ярлык и значок и поставит программу в меню. Ярлык называется так же, как внутри образа, поэтому окно программы и в панели задач получает свой значок. Новый образ той же программы заменяет прежний, удаление убирает и файл, и ярлык.
+
 Вкладка «Ядра» показывает установленные и доступные ядра, ставит ядро вместе с заголовками и модулями ваших устройств, подсказывает, если у запасного ядра не хватает модуля, и выбирает основное ядро в загрузчике Limine. Вкладка «История» раскладывает журнал pacman по дням.
 
 Все действия с правами root идут через стандартное окно пароля (pkexec). Пароль программа не видит.
@@ -87,7 +89,7 @@ make install DESTDIR=/ PREFIX=/usr
 
 See the screenshots above; the interface is available in Russian and English.
 
-KeepUp is a GNOME-style update manager for Arch Linux and CachyOS: search and install from the repositories, Flathub and AUR, pending updates from the repositories, AUR and Flatpak, Arch news with optional machine translation and an offline archive, a page for every package with release notes, rollback to any previous version (pacman cache, Arch Linux Archive or an AUR commit), kernel management with Limine, and pacman history by day.
+KeepUp is a GNOME-style update manager for Arch Linux and CachyOS: search and install from the repositories, Flathub and AUR, AppImage integration into the menu, pending updates from the repositories, AUR and Flatpak, Arch news with optional machine translation and an offline archive, a page for every package with release notes, rollback to any previous version (pacman cache, Arch Linux Archive or an AUR commit), kernel management with Limine, and pacman history by day.
 
 This is primarily a personal project, published as is. Further development, fixes and support are not guaranteed. It was written in about an hour together with Claude Opus 5.5 (Anthropic) as a Python prototype that may later be rewritten in Rust.
 
