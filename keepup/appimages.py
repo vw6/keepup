@@ -3,7 +3,9 @@ import glob
 import json
 import os
 import re
+import selectors
 import shutil
+import struct
 import subprocess
 import tempfile
 import time
@@ -81,9 +83,10 @@ def exec_args(value):
     return value.split(None, 1)[1] if ' ' in value else ''
 
 
-def make_desktop(entries, path, icon):
-    """Свой ярлык из ярлыка образа: Exec и TryExec на файл в нашей папке, значок файлом, пометка KeepUp."""
-    skip = {'Exec', 'TryExec', 'Icon', 'DBusActivatable', MARK}
+def make_desktop(entries, path, icon, wm_class=''):
+    """Свой ярлык из ярлыка образа: Exec и TryExec на файл в нашей папке, значок файлом, пометка KeepUp.
+    wm_class, если известен, заменяет StartupWMClass образа: по нему GNOME узнаёт окно программы."""
+    skip = {'Exec', 'TryExec', 'Icon', 'DBusActivatable', MARK} | ({'StartupWMClass'} if wm_class else set())
     out = ['[Desktop Entry]']
     seen = set()
     for k, v in entries:
@@ -98,6 +101,8 @@ def make_desktop(entries, path, icon):
     out.append(f'TryExec={path}')
     if icon:
         out.append(f'Icon={icon}')
+    if wm_class:
+        out.append(f'StartupWMClass={wm_class}')
     out.append(f'{MARK}={path}')
     return '\n'.join(out) + '\n'
 
@@ -206,6 +211,91 @@ def read_image(path, lang=''):
     return entries, os.path.basename(desktops[0]), find_icon(root, icon_name), version, tmp
 
 
+# Программы на Electron
+
+def electron_app_id(pkg):
+    """Имя окна, которое Electron сообщает GNOME (app_id под Wayland). Из desktopName в package.json, если оно есть,
+    иначе из названия программы: «HUE Club» превращается в hue-club. Ярлык образа обычно назван по полю name
+    (hue-club-launcher.desktop), поэтому без desktopName панель не узнаёт окно и рисует вместо значка шестерёнку."""
+    desktop = (pkg.get('desktopName') or '').strip()
+    if desktop:
+        return desktop[:-8] if desktop.endswith('.desktop') else desktop
+    name = (pkg.get('productName') or pkg.get('name') or '').strip()
+    return re.sub(r'\s+', '-', name.lower())
+
+
+def read_asar_file(path, name):
+    """Один файл из архива app.asar: заголовок (длина в байтах 4..8, JSON с 16-го байта), потом данные файлов."""
+    with open(path, 'rb') as f:
+        head = f.read(16)
+        if len(head) < 16:
+            return None
+        size = struct.unpack('<I', head[4:8])[0]
+        length = struct.unpack('<I', head[12:16])[0]
+        tree = json.loads(f.read(length))
+        node = tree.get('files', {}).get(name)
+        if not node or 'offset' not in node or node.get('unpacked'):
+            return None
+        f.seek(8 + size + int(node['offset']))
+        return f.read(int(node['size']))
+
+
+def electron_package(root):
+    """package.json программы на Electron из смонтированного образа или None, если это не Electron."""
+    plain = os.path.join(root, 'resources', 'app', 'package.json')
+    asar = os.path.join(root, 'resources', 'app.asar')
+    try:
+        if os.path.isfile(plain):
+            with open(plain, encoding='utf-8') as f:
+                return json.load(f)
+        if os.path.isfile(asar):
+            data = read_asar_file(asar, 'package.json')
+            return json.loads(data) if data else None
+    except (OSError, ValueError, struct.error):
+        return None
+    return None
+
+
+def mounted(path):
+    """Монтирует образ его же программой запуска (--appimage-mount) и отдаёт путь; размонтирует, завершив её."""
+    class Mount:
+        def __enter__(self):
+            self.proc = subprocess.Popen([path, '--appimage-mount'], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                         stderr=subprocess.DEVNULL, text=True)
+            try:
+                line = _readline(self.proc, EXTRACT_TIMEOUT)
+            except Exception:
+                self.__exit__()
+                raise
+            return line if line and os.path.isdir(line) else None
+
+        def __exit__(self, *_):
+            self.proc.terminate()
+            try:
+                self.proc.wait(10)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+    return Mount()
+
+
+def _readline(proc, timeout):
+    sel = selectors.DefaultSelector()
+    sel.register(proc.stdout, selectors.EVENT_READ)
+    if not sel.select(timeout):
+        return ''
+    return proc.stdout.readline().strip()
+
+
+def window_class(path):
+    """Имя окна программы, если его можно узнать заранее (пока только для Electron), иначе пустая строка."""
+    try:
+        with mounted(path) as root:
+            pkg = electron_package(root) if root else None
+    except OSError:
+        return ''
+    return electron_app_id(pkg) if pkg else ''
+
+
 # Своя папка
 
 def slug(text):
@@ -285,7 +375,7 @@ def add(source, lang='', move=True):
         desktop = os.path.join(apps_dir(), name)
         os.makedirs(apps_dir(), exist_ok=True)
         with open(desktop + '.tmp', 'w', encoding='utf-8') as f:
-            f.write(make_desktop(entries, target, icon))
+            f.write(make_desktop(entries, target, icon, window_class(target)))
         os.chmod(desktop + '.tmp', 0o755)
         os.replace(desktop + '.tmp', desktop)
         app = AppImage(key, get(entries, 'Name', lang) or key, get(entries, 'Comment', lang), version, target, icon,

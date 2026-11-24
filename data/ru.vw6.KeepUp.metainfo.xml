@@ -36,6 +36,11 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.5.1" date="2026-11-24">
+      <description>
+        <p>AppImage: for Electron apps KeepUp reads the window name the app reports to GNOME (from its package.json) and writes it into the menu entry, so the taskbar shows the app icon instead of a generic one.</p>
+      </description>
+    </release>
     <release version="0.5.0" date="2026-11-24">
       <description>
         <p>New AppImage tab: pick an image or drop it on the tab, KeepUp moves it into its own hidden folder, takes the menu entry and icon from the image and adds it to the menu under the image's own entry name, so the taskbar shows the right icon. A newer image of the same app replaces the old one; removal deletes the file and the entry.</p>

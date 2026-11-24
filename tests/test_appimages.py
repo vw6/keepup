@@ -1,4 +1,6 @@
+import json
 import os
+import struct
 import tempfile
 import unittest
 from unittest import mock
@@ -91,14 +93,39 @@ class Files(unittest.TestCase):
             tmp = tempfile.mkdtemp(dir=home)
             fake = (appimages.parse_desktop(DESKTOP), 'hue-club-launcher.desktop', icon, '1.0.8', tmp)
             with mock.patch.dict(os.environ, {'XDG_DATA_HOME': home}), mock.patch.object(appimages, 'read_image', return_value=fake), \
-                    mock.patch.object(appimages, '_refresh_menu'):
+                    mock.patch.object(appimages, '_refresh_menu'), mock.patch.object(appimages, 'window_class', return_value='hue-club'):
                 app, replaced = appimages.add(src)
                 self.assertFalse(replaced)
                 self.assertFalse(os.path.exists(src))
                 self.assertTrue(os.access(app.path, os.X_OK))
                 self.assertTrue(app.icon.endswith('icon.png'))
                 self.assertEqual(app.desktop, 'hue-club-launcher.desktop')
+                with open(appimages.desktop_path(app), encoding='utf-8') as f:
+                    self.assertIn('StartupWMClass=hue-club', f.read().splitlines())
                 self.assertEqual([a.key for a in appimages.installed()], ['hue-club-launcher'])
                 appimages.remove(app)
                 self.assertEqual(appimages.installed(), [])
                 self.assertFalse(os.path.exists(appimages.desktop_path(app)))
+
+
+class Electron(unittest.TestCase):
+    def test_app_id(self):
+        self.assertEqual(appimages.electron_app_id({'name': 'hue-club-launcher', 'productName': 'HUE Club'}), 'hue-club')
+        self.assertEqual(appimages.electron_app_id({'name': 'x', 'desktopName': 'hue-club-launcher.desktop'}), 'hue-club-launcher')
+        self.assertEqual(appimages.electron_app_id({'name': 'Some App'}), 'some-app')
+
+    def test_asar(self):
+        pkg = json.dumps({'name': 'n', 'productName': 'P Q'}).encode()
+        header = json.dumps({'files': {'main.js': {'size': 3, 'offset': '0'}, 'package.json': {'size': len(pkg), 'offset': '3'}}}).encode()
+        pickle = struct.pack('<II', len(header) + 4, len(header)) + header
+        with tempfile.TemporaryDirectory() as root:
+            os.makedirs(os.path.join(root, 'resources'))
+            with open(os.path.join(root, 'resources', 'app.asar'), 'wb') as f:
+                f.write(struct.pack('<II', 4, len(pickle)) + pickle + b'abc' + pkg)
+            self.assertEqual(appimages.electron_package(root), {'name': 'n', 'productName': 'P Q'})
+            self.assertIsNone(appimages.electron_package(os.path.join(root, 'нет')))
+
+    def test_desktop_takes_window_class(self):
+        text = appimages.make_desktop(appimages.parse_desktop(DESKTOP), '/a.AppImage', '', 'hue-club')
+        self.assertIn('StartupWMClass=hue-club', text.splitlines())
+        self.assertNotIn('StartupWMClass=HUE Club', text.splitlines())
